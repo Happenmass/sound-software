@@ -59,7 +59,7 @@ class SoundApplication : Application() {
         repository = RecordingRepository(filesDir, recordingIndex)
         assistant = dev.soundsoftware.app.agent.AgentController(recordingIndex, settings, scope)
         playback = Playback(scope)
-        processor = Processor(repository, settings, modelDir, File(filesDir, "checkpoints"), scope, qnnFiles=dev.soundsoftware.app.inference.QnnFiles.from(this,modelDir), diarizer=dev.soundsoftware.app.inference.SherpaDiarizer.forDevice(this,File(modelDir,"diarization")), qwenHtpFiles = dev.soundsoftware.app.inference.QwenHtpFiles(this, modelDir), notify = ::notifyDone)
+        processor = Processor(repository, settings, modelDir, File(filesDir, "checkpoints"), scope, diarizer=dev.soundsoftware.app.inference.SherpaDiarizer.forDevice(this,File(modelDir,"diarization")), qwenHtpFiles = dev.soundsoftware.app.inference.QwenHtpFiles(this, modelDir), notify = ::notifyDone)
         devices = DeviceManager(DeviceLinkFactory.create(this), settings, repository, scope) { id ->
             val prefs = settings.state.value
             if (prefs.autoTranscribe && processor.modelReady(prefs.defaults.profileId)) {

@@ -6,7 +6,7 @@ An independent Android app for the soundcore Work D3200 recorder. Sync recording
 
 - Batch sync and automatic sync after recording. Automatic sync prefers Wi-Fi if a batch contains a file of at least 2 MiB.
 - Play and revisit the D3200's double-tap highlights. Device sync and highlights have been tested with firmware 04.92.
-- Run Qwen3-ASR or SenseVoice on a compatible Qualcomm NPU, or configure a transcription API. The signed NPU APK includes both models.
+- The signed NPU APK includes Qwen3-ASR for on-device transcription on a compatible Qualcomm NPU. You can also configure a transcription API.
 - Connect an OpenAI-compatible notes service for meeting, interview, job interview, and lecture notes. It can choose a template automatically. The assistant searches across recordings and links answers to the original transcript.
 - Export documents and share WAV audio separately. Local transcription stays on the device. The notes service receives text, and the optional cloud transcription service receives audio only when selected.
 
@@ -15,7 +15,7 @@ An independent Android app for the soundcore Work D3200 recorder. Sync recording
 Download the signed APK from [Releases](https://github.com/Happenmass/sound-software/releases/latest). The public APK supports ARM64 devices running Android 8.0 or later. Wi-Fi sync requires Android 10 or later. It installs alongside the developer build with separate storage.
 
 1. Open the app. In **Device**, find and pair a recorder, or use **Settings → Import audio file**.
-2. For local transcription, select Qwen3-ASR or SenseVoice under **Settings → Default transcription settings**. The app prepares the model on first use.
+2. For local transcription, select Qwen3-ASR under **Settings → Default transcription settings**. The app prepares the model on first use.
 3. To generate notes or use the assistant, configure an HTTPS endpoint and model in **Settings → Notes service**. The assistant requires a model that supports tool calls.
 
 The release provides one signed NPU APK. Local transcription targets ARM64 SM8850 phones with 4 KB memory pages and has been verified on the HONOR Magic V6. The app lists compatible models and their installation status under **Settings → Local models**. See the [model guide](docs/MODELS.md#transcription-models) for storage and build details.
@@ -33,7 +33,7 @@ bash tools/setup-dependencies.sh
 
 The unsigned APK is at `app/build/outputs/apk/release/app-release-unsigned.apk`. To build a locally signed development APK, run `./gradlew :app:assembleDebug`. To distribute a release, align and sign it with your own Android signing key.
 
-See [building the NPU APK](docs/MODELS.md#build-the-npu-apk) for the release configuration with both transcription engines and speaker acceleration.
+See [building the NPU APK](docs/MODELS.md#build-the-npu-apk) for the release configuration with Qwen3-ASR and speaker acceleration.
 
 ## License
 

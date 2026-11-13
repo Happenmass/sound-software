@@ -10,14 +10,12 @@ CPU worker 只并行原有独立前向：仍为 sherpa-onnx 2.0.1、相同 ORT 1
 
 ```sh
 python3 tools/diarization-worker/build.py
-# QNN 通用图探针单独随以下构建生成，只进入测试包：
-python3 tools/model-validation/qnn_build.py
-./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PincludeSpeakerWorker=true
 ```
 
-原生代码只在全局缓存编译。`tools/speaker-runtime-lock.json` 固定源码和二进制 SHA；重新编译后必须先通过输出一致性与性能验证，再审阅更新锁文件。Gradle 校验并复制 CPU 可执行文件至主包的 `libsound_speaker_worker.so`，QNN 通用图探针只进测试包。两者都复用原 AAR 的同字节 ORT，不替换 CPU JNI。
+原生代码只在全局缓存编译。`tools/speaker-runtime-lock.json` 固定源码和二进制 SHA；重新编译后必须先通过输出一致性与性能验证，再审阅更新锁文件。Gradle 校验并复制 CPU 可执行文件至主包的 `libsound_speaker_worker.so`。它复用原 AAR 的同字节 ORT。
 
-`-PincludeQnn=false` 保留原来的纯 CPU JNI 构建；加 `-PincludeSpeakerWorker=true` 可单独打包并行 CPU worker。`-PincludeQnn=true` 打包两者，生产中仅 SM8850 且录音至少 20 秒时启用 4 个外部工作线程、每个模型会话 1 个内部线程；短录音保留 JNI。其他芯片保持 JNI。App 的 ASR 模型选择不受影响。
+`-PincludeSpeakerWorker=true` 打包并行 CPU worker，生产中仅 SM8850 且录音至少 20 秒时启用。短录音及其他芯片使用 JNI。
 
 ## 协议与生命周期
 
@@ -37,8 +35,6 @@ adb -s SERIAL shell am instrument -w -r -e runSpeakerNpu true -e class 'dev.soun
 ```
 
 比较的是每段的毫秒起止与人物归属完全一致，允许标签编号整体换名；不允许时间容差或只比较人数。交替执行原 JNI/并行版，报告含完整逐段结果、三轮耗时和热状态。独立重算保留改稿的回归另见 `QnnPhoneValidationTest#recalculateSpeakersPreservesEdits`。
-
-NPU 探针 `probeOfficialQnnContextsWithoutChangingProductionModels` 只检测独立候选的加载/执行；未执行图不能报告为 NPU 性能。
 
 
 ## 2.50 NPU 混合方案：构建和部署
@@ -87,7 +83,7 @@ python3 tools/diarization-worker/build-npu.py
 python3 tools/deploy-speaker-npu-models.py --serial SERIAL
 ```
 
-`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP，不替换 ASR 2.40。`-PincludeSpeakerNpu=false` 保留 CPU 并行与 ASR QNN，`-PincludeQnn=false` 默认同时关闭 NPU 打包以保留原纯 CPU 构建；可显式单独开启 speaker NPU。当前只有锁文件的 `validatedDeviceModels` 中的 PNM-AN10 自动启用，且时长至少 20 秒；权重缺失时走 CPU。权重约 49MB，另行部署，不在 APK 中。安装公开版后，用 `--package dev.soundsoftware.app.release` 部署模型。构建时从同版 SDK 根目录验证并复制原始许可及声明。
+`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP。Qwen3-ASR 使用独立的 2.51 运行时。当前只有锁文件的 `validatedDeviceModels` 中的 PNM-AN10 自动启用，且时长至少 20 秒；权重缺失时走 CPU。权重约 49MB，另行部署，不在 APK 中。安装公开版后，用 `--package dev.soundsoftware.app.release` 部署模型。构建时从同版 SDK 根目录验证并复制原始许可及声明。
 
 ## NPU 真机验收
 

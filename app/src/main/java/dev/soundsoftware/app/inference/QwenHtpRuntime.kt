@@ -30,7 +30,7 @@ class QwenHtpFiles(context: Context, modelRoot: File) {
         JSONObject(app.assets.open("qwen-htp-manifest.json").bufferedReader().use { it.readText() })
     }
 
-    fun supported(device: QnnDevice = QnnFiles.device()): Boolean =
+    fun supported(device: QnnDevice = QnnDevice.current()): Boolean =
         BuildConfig.QWEN_HTP_ENABLED && executable.canExecute() && device.supportsSm8850Htp
 
     fun unavailable(): String? {

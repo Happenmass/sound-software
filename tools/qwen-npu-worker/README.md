@@ -8,9 +8,9 @@ Build with JDK 17, Python 3.12+ and Android NDK 28.2.13676358:
 ./gradlew :app:assembleDebug -PincludeQwenHtp=true
 ```
 
-Add `-PincludeQnn=true` to retain the existing SenseVoice and speaker NPU paths in the same development build. The Qwen worker uses its own process and runtime directory, with ONNX Runtime 1.29, the Qualcomm QNN EP 2.7 and QAIRT 2.51. The build verifies its dependencies against `artifacts.json` and includes upstream licenses and notices. Model weights are installed separately.
+Add `-PincludeSpeakerNpu=true` to include the separate speaker accelerator. Add `-PincludeAsrWeights=true` to bundle the pinned Qwen3-ASR weights. The Qwen worker uses its own process and runtime directory, with ONNX Runtime 1.29, the Qualcomm QNN EP 2.7 and QAIRT 2.51. The build verifies its dependencies against `artifacts.json` and includes upstream licenses and notices. Builds with bundled weights prepare the model on first use.
 
-Download the pinned [OnSpeak47 NPU model release](https://github.com/DS-PNQ/OnSpeak47-npu-models/releases/tag/v2.2.0-npu) and deploy it after installing and opening the app:
+Download the pinned [OnSpeak47 NPU model release](https://github.com/DS-PNQ/OnSpeak47-npu-models/releases/tag/v2.2.0-npu) into the shared cache. For builds without bundled weights, deploy it after installing and opening the app:
 
 ```sh
 model_dir="$HOME/.cache/codex/models/qwen3-asr-onspeak47-sm8850/v2.2.0-npu"

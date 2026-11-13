@@ -25,8 +25,6 @@
   <string name="asr_http">"Cloud API"</string>
   <string name="asr_http_description">"Upload audio to your configured transcription service"</string>
   <string name="asr_https_required">"The transcription service URL must use HTTPS."</string>
-  <string name="asr_npu">"SenseVoice NPU"</string>
-  <string name="asr_npu_description">"On-device NPU · SM8850 and matching models required"</string>
   <string name="asr_qwen_htp">"Qwen3-ASR NPU"</string>
   <string name="asr_qwen_htp_description">"On-device · Mixed Chinese and English"</string>
   <string name="qwen_htp_not_bundled">"This build does not include the Qwen3-ASR NPU runtime."</string>
@@ -321,7 +319,6 @@
   <string name="processing_failed">"Processing failed"</string>
   <string name="processing_notification">"Transcribing or generating notes"</string>
   <string name="qa_failed">"The question could not be answered."</string>
-  <string name="qnn_not_configured">"QNN is not configured in this build."</string>
   <string name="qualcomm_npu">"Qualcomm NPU acceleration"</string>
   <string name="queued">"Queued"</string>
   <string name="qwen_language_help">"Qwen3-ASR detects the language automatically"</string>
@@ -383,7 +380,6 @@
   <string name="select">"Select"</string>
   <string name="select_recordings">"Select recordings to sync"</string>
   <string name="send">"Send"</string>
-  <string name="sensevoice_hotwords_help">"SenseVoice uses these terms only to help generate notes."</string>
   <string name="sensevoice_npu_description">"SenseVoice · For SM8850 phones"</string>
   <string name="separate_audio_export">"Export audio separately"</string>
   <string name="serial_number">"Serial number"</string>

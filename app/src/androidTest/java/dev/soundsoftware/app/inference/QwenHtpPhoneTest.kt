@@ -29,7 +29,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class QwenHtpPhoneTest {
-    @Test fun bundledModelsDecodeWithoutExternallyInstalledWeights() = runBlocking {
+    @Test fun bundledQwenDecodesWithoutExternallyInstalledWeights() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("runBundledAsr") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val app = context.applicationContext as SoundApplication
@@ -37,21 +37,13 @@ class QwenHtpPhoneTest {
         val fixture = PcmWav.open(File(app.getExternalFilesDir(null), "validation/qwen-htp/mixed.wav"))
         val samples = fixture.readMono(0, fixture.sampleCount.toInt())
         val qwen = QwenHtpFiles(app, modelRoot)
-        val senseVoice = QnnFiles.from(app, modelRoot)
         assertTrue(dev.soundsoftware.app.BuildConfig.ASR_WEIGHTS_BUNDLED)
         assertEquals(null, qwen.unavailable())
-        assertEquals(null, senseVoice.unavailable(QnnFiles.device()))
         assertTrue(!modelRoot.exists())
         QwenHtpRuntime(qwen, File(modelRoot, "qwen-windows")).use { runtime ->
             runtime.prepare()
             assertTrue(qwen.modelDir.canonicalPath.startsWith(app.noBackupFilesDir.canonicalPath + "/"))
             assertTrue(runtime.decode(samples, 16000).text.lowercase().contains("play basketball"))
-            assertEquals("qnn-htp", runtime.backend)
-        }
-        QnnProcessRuntime(senseVoice, File(modelRoot, "sense-windows")).use { runtime ->
-            runtime.prepare()
-            assertTrue(senseVoice.model.canonicalPath.startsWith(app.noBackupFilesDir.canonicalPath + "/"))
-            assertTrue(runtime.decode(samples, 16000).text.isNotBlank())
             assertEquals("qnn-htp", runtime.backend)
         }
         modelRoot.deleteRecursively()
@@ -64,11 +56,10 @@ class QwenHtpPhoneTest {
         val app = context.applicationContext as SoundApplication
         val files = QwenHtpFiles(app, app.modelDir)
         assertEquals(null, files.unavailable())
-        val expected = listOf("qwen-htp") +
-            if (dev.soundsoftware.app.BuildConfig.QNN_ENABLED) listOf("sensevoice-qnn") else emptyList()
+        val expected = listOf("qwen-htp")
         assertEquals(expected, app.processor.localAsrProfiles().map { it.id })
         assertTrue(expected.all(app.processor::modelReady))
-        assertTrue(!app.processor.modelReady("qwen-cpu") && !app.processor.modelReady("sensevoice-cpu"))
+        assertTrue(!app.processor.modelReady("sensevoice-qnn"))
         val fixtureDir = File(app.getExternalFilesDir(null), "validation/qwen-htp")
         val testDir = File(context.cacheDir, "qwen-phone-" + SystemClock.elapsedRealtimeNanos()).apply { mkdirs() }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -97,7 +88,7 @@ class QwenHtpPhoneTest {
             input.copyTo(repo.audioFile("test"))
             repo.add(Recording("test", 0, duration))
             processor.start()
-            processor.enqueue("test", TranscribeOptions(profileId = "qwen-cpu", template = SceneTemplate.TRANSCRIPT_ONLY))
+            processor.enqueue("test", TranscribeOptions(profileId = "sensevoice-qnn", template = SceneTemplate.TRANSCRIPT_ONLY))
             val done = withTimeout(240_000) {
                 repo.recordings.first { it.singleOrNull()?.stage in setOf(ProcessingStage.DONE, ProcessingStage.FAILED) }.single()
             }

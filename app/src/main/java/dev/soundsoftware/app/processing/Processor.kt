@@ -40,7 +40,6 @@ data class AsrProfile(val id: String, val titleRes: Int, val subtitleRes: Int, v
 
 val ASR_PROFILES = listOf(
     AsrProfile("qwen-htp", R.string.asr_qwen_htp, R.string.asr_qwen_htp_description, true),
-    AsrProfile("sensevoice-qnn", R.string.asr_npu, R.string.asr_npu_description, true),
     AsrProfile("http-api", R.string.asr_http, R.string.asr_http_description, false),
 )
 
@@ -54,7 +53,6 @@ class Processor(
     private val modelDir: File,
     private val checkpointDir: File,
     private val scope: CoroutineScope,
-    private val qnnFiles: dev.soundsoftware.app.inference.QnnFiles? = null,
     val diarizer: dev.soundsoftware.app.inference.SpeakerAnalyzer = SherpaDiarizer(File(modelDir, "diarization")),
     private val analysisClient: OkHttpClient = OkHttpClient(),
     private val qwenHtpFiles: QwenHtpFiles? = null,
@@ -91,28 +89,13 @@ class Processor(
         }
     }
 
-    fun qnnUnavailableReason(): String? {
-        if (!dev.soundsoftware.app.BuildConfig.QNN_ENABLED) return settings.text(R.string.qnn_not_configured)
-        val files = qnnFiles ?: return settings.text(R.string.qnn_not_configured)
-        return files.unavailable(dev.soundsoftware.app.inference.QnnFiles.device())
-    }
-
     fun qwenHtpUnavailableReason(): String? =
         if (qwenHtpFiles == null) settings.text(R.string.qwen_htp_not_bundled) else qwenHtpFiles.unavailable()
 
-    fun localAsrProfiles(): List<AsrProfile> {
-        val device = dev.soundsoftware.app.inference.QnnFiles.device()
-        return ASR_PROFILES.filter {
-            when (it.id) {
-                "qwen-htp" -> qwenHtpFiles?.supported(device) == true
-                "sensevoice-qnn" -> qnnFiles?.supported(device) == true
-                else -> false
-            }
-        }
-    }
+    fun localAsrProfiles(): List<AsrProfile> =
+        ASR_PROFILES.filter { it.local && qwenHtpFiles?.supported() == true }
 
     fun modelReady(profileId: String): Boolean = when (profileId) {
-        "sensevoice-qnn" -> qnnUnavailableReason() == null
         "qwen-htp" -> qwenHtpUnavailableReason() == null
         "http-api" -> settings.state.value.remoteAsr.let { it.endpoint.isNotBlank() && it.model.isNotBlank() } && settings.secrets.has(KEY_ASR)
         else -> false
@@ -157,7 +140,7 @@ class Processor(
         val options = (recording.options ?: settings.state.value.defaults).withCurrentAsrProfile()
         try {
             if (!modelReady(options.profileId)) throw AsrException(ErrorCode.MODEL_NOT_READY,
-                when(options.profileId) {"http-api" -> settings.text(R.string.cloud_asr_not_configured);"sensevoice-qnn" -> qnnUnavailableReason() ?: settings.text(R.string.unavailable);"qwen-htp" -> qwenHtpUnavailableReason() ?: settings.text(R.string.unavailable);else -> settings.text(R.string.local_asr_models_missing)})
+                when(options.profileId) {"http-api" -> settings.text(R.string.cloud_asr_not_configured);"qwen-htp" -> qwenHtpUnavailableReason() ?: settings.text(R.string.unavailable);else -> settings.text(R.string.local_asr_models_missing)})
             val wav = withContext(Dispatchers.IO) { PcmWav.open(repository.audioFile(id)) }
             repository.update(id) { it.copy(stage = ProcessingStage.TRANSCRIBING, stageText = settings.text(R.string.preparing), error = null) }
             val warnings = mutableListOf<String>()
@@ -211,12 +194,6 @@ class Processor(
                 val runtime = QwenHtpRuntime(files, File(checkpointDir, "qwen-htp-windows"))
                 val vad = turns?.let { TurnWindows(it.toSpeechRanges(16000, wav.sampleCount), it.hashCode()) } ?: WholeRecordingVad()
                 LocalAsrAdapter(runtime, vad)
-            }
-            "sensevoice-qnn" -> {
-                val files=qnnFiles ?: throw AsrException(ErrorCode.BACKEND_UNAVAILABLE,settings.text(R.string.qnn_not_configured))
-                val runtime=dev.soundsoftware.app.inference.QnnProcessRuntime(files,File(checkpointDir,"qnn-windows"),language=options.effectiveLanguage)
-                val vad=turns?.let {TurnWindows(it.toSpeechRanges(16000,wav.sampleCount),it.hashCode())} ?: WholeRecordingVad()
-                LocalAsrAdapter(runtime,vad)
             }
             else -> throw AsrException(ErrorCode.BACKEND_UNAVAILABLE, settings.text(R.string.unknown_asr))
         }

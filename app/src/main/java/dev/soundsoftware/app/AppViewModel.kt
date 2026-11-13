@@ -81,7 +81,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun title(r: Recording) = app.displayTitle(r)
     fun qwenHtpUnavailableReason() = app.processor.qwenHtpUnavailableReason()
-    fun qnnUnavailableReason() = app.processor.qnnUnavailableReason()
     fun localAsrProfiles() = app.processor.localAsrProfiles()
     fun modelReady(profileId: String) = app.processor.modelReady(profileId)
     fun llmReady() = app.processor.llmReady()

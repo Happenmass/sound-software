@@ -33,17 +33,6 @@ class SpeakerNpuValidationTest {
         val engine=OfflineSpeakerDiarization(config=cfg);try{withContext(Dispatchers.Default){engine.process(samples)}}finally{engine.release()}
         report.put("status","complete");output.writeText(report.toString(2))
     }
-    @Test fun probeOfficialQnnContextsWithoutChangingProductionModels()=runBlocking {
-        enabled();val native=File(base.applicationInfo.nativeLibraryDir);val testNative=File(InstrumentationRegistry.getInstrumentation().context.applicationInfo.nativeLibraryDir);val executable=File(testNative,"libsound_speaker_qnn_probe.so");assertTrue(executable.canExecute())
-        val env=mapOf("LD_LIBRARY_PATH" to "${testNative.path}:${native.path}:/system/lib64:/system_ext/lib64:/vendor/lib64","ADSP_LIBRARY_PATH" to native.path)
-        val report=JSONObject().put("sdk","2.40.0.251030").put("candidateSdk","2.50.0.260828221209").put("rows",JSONArray());val output=File(root,"qnn-compatibility.json")
-        for(name in listOf("segmentation.bin","embedding.bin")){
-            val start=android.os.SystemClock.elapsedRealtime();val result=AndroidQnnProcessRunner().run(listOf(executable.path,File(native,"libQnnHtp.so").path,File(native,"libQnnSystem.so").path,File(root,name).path),env)
-            val lines=result.output.lineSequence().filter{it.contains("SPEAKER_QNN") || it.startsWith("INPUT ") || it.contains("ret code") || it.contains("Failed") || it.contains("QNN_VALIDATION graphExecute") || it.contains("backendId:")}.take(40).toList()
-            report.getJSONArray("rows").put(JSONObject().put("model",name).put("exit",result.exit).put("elapsedMs",android.os.SystemClock.elapsedRealtime()-start).put("graphExecuted",result.output.contains("QNN_VALIDATION graphExecute succeeded")).put("diagnostics",JSONArray(lines)));output.writeText(report.toString(2))
-        }
-        report.put("productionModelsChanged",false);output.writeText(report.toString(2))
-    }
     @Test fun compareParallelWithoutChangingAnyTurnOrIdentity()=runBlocking {
         enabled();val input=File(root,"dialog.wav");val wav=PcmWav.open(input)
         val reference=JSONObject(File(root,"cpu-reference.json").readText()).getJSONArray("rows")

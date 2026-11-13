@@ -57,10 +57,9 @@ data class TranscribeOptions(
     val hotwords: List<String> = emptyList(),
 ) {
     init { require(speakerCount == null || speakerCount in 1..12) }
-    /** Translate saved CPU selections when a recording is transcribed again. */
+    /** Translate retired local model selections when a recording is transcribed again. */
     fun withCurrentAsrProfile(): TranscribeOptions = when (profileId) {
-        "qwen-cpu" -> copy(profileId = "qwen-htp")
-        "sensevoice-cpu" -> copy(profileId = "sensevoice-qnn")
+        "qwen-cpu", "sensevoice-cpu", "sensevoice-qnn" -> copy(profileId = "qwen-htp")
         else -> this
     }
 
