@@ -541,4 +541,13 @@
     <string name="audio_not_found">The local audio file is missing. Sync the recording first.</string>
     <string name="transcript_htp">Transcribed with Qualcomm HTP</string>
     <string name="speaker_htp">Speaker embeddings on Qualcomm HTP · %1$d runs</string>
+  <string name="assistant_all_recordings">All recordings</string>
+  <string name="assistant_this_recording">This recording</string>
+  <string name="assistant_ask_recording">Ask about this recording</string>
+  <string name="assistant_single_intro">Answers use this recording’s transcript and link to the original passages.</string>
+  <string name="assistant_draft">Writing answer…</string>
+  <string name="assistant_jump_to_latest">Jump to latest and resume auto-scroll</string>
+  <string name="assistant_cancelled">Stopped</string>
+  <string name="assistant_clear_scope">Clear the messages in this conversation?</string>
+  <string name="assistant_open_all">Open all-recordings assistant</string>
 </resources>

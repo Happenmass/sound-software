@@ -541,4 +541,13 @@
     <string name="audio_not_found">本地音频不存在，请先同步录音</string>
     <string name="transcript_htp">已使用高通 HTP 转写</string>
     <string name="speaker_htp">已用高通 HTP 提取声纹 · %1$d 次</string>
+  <string name="assistant_all_recordings">全库问答</string>
+  <string name="assistant_this_recording">本录音问答</string>
+  <string name="assistant_ask_recording">问这条录音</string>
+  <string name="assistant_single_intro">从当前录音的逐字稿查找答案，并提供可回放的原文引用。</string>
+  <string name="assistant_draft">正在生成回答…</string>
+  <string name="assistant_jump_to_latest">跳到最新消息并恢复自动滚动</string>
+  <string name="assistant_cancelled">已停止</string>
+  <string name="assistant_clear_scope">清空当前会话的问答记录？</string>
+  <string name="assistant_open_all">去全库助手提问</string>
 </resources>

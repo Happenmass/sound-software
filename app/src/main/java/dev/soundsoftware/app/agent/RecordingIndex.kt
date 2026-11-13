@@ -22,6 +22,8 @@ interface RecordingProjection {
 /** App-private SQLite relational mirror. WAV/legacy metadata remain compatible and rebuildable. */
 class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeable {
     private val db: SQLiteDatabase
+    @Volatile var corpusGeneration = 0L
+        private set
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     init {
         file.parentFile?.mkdirs()
@@ -37,21 +39,33 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
         val hasHighlightState=db.rawQuery("PRAGMA table_info(recordings)",null).use {c->var found=false;while(c.moveToNext())if(c.getString(1)=="highlights_known")found=true;found}
         if(!hasHighlightState) db.execSQL("ALTER TABLE recordings ADD COLUMN highlights_known INTEGER NOT NULL DEFAULT 0")
         db.execSQL("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,body TEXT NOT NULL,updated INTEGER NOT NULL)")
-        db.version = 2
+        db.execSQL("CREATE TABLE IF NOT EXISTS recording_sessions(recording_id TEXT PRIMARY KEY REFERENCES recordings(id) ON DELETE CASCADE,body TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS assistant_context_invalidated(id INTEGER PRIMARY KEY)")
+        db.version = 3
     }
     @Synchronized override fun reconcile(recordings: List<Recording>) = transaction {
         val ids = recordings.map { it.id }.toSet()
         val stored = db.rawQuery("SELECT id FROM recordings", null).use { c -> buildList { while(c.moveToNext()) add(c.getString(0)) } }
-        stored.filterNot { it in ids }.forEach(::removeRows)
+        val removed = stored.filterNot { it in ids }
+        removed.forEach(::removeRows)
+        if (removed.isNotEmpty()) invalidateGlobalContext()
         recordings.forEach(::upsertRows)
     }
     @Synchronized override fun upsert(recording: Recording) = transaction { upsertRows(recording) }
-    @Synchronized override fun remove(id: String) = transaction { removeRows(id) }
+    @Synchronized override fun remove(id: String) = transaction {
+        removeRows(id)
+        invalidateGlobalContext()
+    }
     private fun transaction(block: () -> Unit) { db.beginTransaction(); try { block(); db.setTransactionSuccessful() } finally { db.endTransaction() } }
     private fun removeRows(id: String) {
-        db.delete("hardware_highlights","recording_id=?",arrayOf(id))
-        db.execSQL("DELETE FROM segment_fts WHERE rowid IN (SELECT rowid FROM segments WHERE recording_id=?)", arrayOf(id))
+        removeProjectionRows(id)
         db.delete("recordings", "id=?", arrayOf(id))
+    }
+    private fun removeProjectionRows(id: String) {
+        db.delete("hardware_highlights","recording_id=?",arrayOf(id))
+        db.delete("todos", "recording_id=?", arrayOf(id))
+        db.execSQL("DELETE FROM segment_fts WHERE rowid IN (SELECT rowid FROM segments WHERE recording_id=?)", arrayOf(id))
+        db.delete("segments", "recording_id=?", arrayOf(id))
     }
     private fun upsertRows(r: Recording) {
         // Exclude progress and chat history: they do not change search data.
@@ -59,9 +73,11 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
         val known=when {r.hardwareHighlights!=null->1;r.source==RecordingSource.DEVICE->0;else->-1}
         val old = db.rawQuery("SELECT projection,highlights_known FROM recordings WHERE id=?", arrayOf(r.id)).use { if(it.moveToFirst()) it.getString(0) to it.getInt(1) else null }
         if(old == (projection to known)) return
-        removeRows(r.id)
+        removeProjectionRows(r.id)
         val revision = MeetingAnalyzer.transcriptHash(r)
-        db.execSQL("INSERT INTO recordings VALUES(?,?,?,?,?,?,?)", arrayOf<Any?>(r.id,r.title ?: (java.text.SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(r.createdAt) + " 的录音"),r.createdAt,r.durationMs,revision,projection,known))
+        val title = r.title ?: (java.text.SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(r.createdAt) + " 的录音")
+        if (old == null) db.execSQL("INSERT INTO recordings VALUES(?,?,?,?,?,?,?)", arrayOf<Any?>(r.id,title,r.createdAt,r.durationMs,revision,projection,known))
+        else db.execSQL("UPDATE recordings SET title=?,created=?,duration=?,revision=?,projection=?,highlights_known=? WHERE id=?", arrayOf<Any?>(title,r.createdAt,r.durationMs,revision,projection,known,r.id))
         var order=0
         r.transcript?.segments.orEmpty().forEach { segment ->
             var offset=0
@@ -81,29 +97,96 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
         }
         r.summary?.todos.orEmpty().forEach { t -> db.execSQL("INSERT INTO todos VALUES(?,?,?,?,?,?)", arrayOf<Any?>(r.id,t.id,t.text,t.owner,t.due,if(t.done)1 else 0)) }
     }
-    suspend fun saveSession(s: AgentSession) = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) {
-        db.execSQL("INSERT OR REPLACE INTO sessions VALUES(?,?,?)", arrayOf<Any?>(s.id,json.encodeToString(s),System.currentTimeMillis()))
+    suspend fun saveSession(s: AgentSession, recordingId: String? = null, expectedGeneration: Long? = null) = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) {
+        check(expectedGeneration == null || corpusGeneration == expectedGeneration) { "The recording library changed. Please ask again." }
+        if (recordingId == null) saveGlobal(s)
+        else db.execSQL("INSERT OR REPLACE INTO recording_sessions VALUES(?,?)", arrayOf(recordingId, json.encodeToString(s)))
     } }
-    suspend fun latestSession(): AgentSession? = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) {
-        val latest=db.rawQuery("SELECT id,length(body) FROM sessions ORDER BY updated DESC LIMIT 1",null).use {
+    private fun saveGlobal(s: AgentSession) {
+        db.execSQL("INSERT OR REPLACE INTO sessions VALUES(?,?,?)", arrayOf<Any?>(s.id,json.encodeToString(s),System.currentTimeMillis()))
+    }
+    suspend fun latestSession(recordingId: String? = null): AgentSession? = withContext(Dispatchers.IO) {
+        synchronized(this@RecordingIndex) { readSession(recordingId) }
+    }
+    private fun readSession(recordingId: String?): AgentSession? =
+        readSessionBody(recordingId)?.let { json.decodeFromString<AgentSession>(it) }
+
+    private fun readSessionBody(recordingId: String?): String? {
+        val table = if (recordingId == null) "sessions" else "recording_sessions"
+        val key = if (recordingId == null) "id" else "recording_id"
+        val predicate = if (recordingId == null) "ORDER BY updated DESC,rowid DESC LIMIT 1" else "WHERE recording_id=?"
+        val latest=db.rawQuery("SELECT $key,length(body) FROM $table $predicate",recordingId?.let { arrayOf(it) }).use {
             if(it.moveToFirst()) it.getString(0) to it.getLong(1) else null
         }
-        latest?.let { (id,length)->
+        return latest?.let { (id,length)->
             // Long tool traces/history can exceed Android's per-row CursorWindow size.
             // SQL substr offsets count Unicode code points, so advance by the SQL chunk size.
-            val body=buildString {
+            buildString {
                 var offset=1L
                 while(offset<=length) {
-                    db.rawQuery("SELECT substr(body,?,65536) FROM sessions WHERE id=?",arrayOf(offset.toString(),id)).use {
+                    db.rawQuery("SELECT substr(body,?,65536) FROM $table WHERE $key=?",arrayOf(offset.toString(),id)).use {
                         check(it.moveToFirst()) { "助手会话已被移除" }; append(it.getString(0))
                     }
                     offset+=65536
                 }
             }
-            json.decodeFromString<AgentSession>(body)
         }
-    } }
-    suspend fun clearSessions() = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) { db.delete("sessions",null,null); Unit } }
+    }
+    private fun invalidateGlobalContext() {
+        corpusGeneration++
+        db.execSQL("INSERT OR IGNORE INTO assistant_context_invalidated VALUES(1)")
+        readSessionBody(null)?.let { raw ->
+            if ("hostVersion" !in json.parseToJsonElement(raw).jsonObject) {
+                val session = json.decodeFromString<AgentSession>(raw)
+                saveGlobal(session.copy(memory = "", firstKeptTurn = session.turns.size,
+                    contextMessages = emptyList(), contextInitialized = true, lastUsage = null))
+            }
+        }
+    }
+    suspend fun readAssistantBody(recordingId: String?, generation: Long): JsonObject = withContext(Dispatchers.IO) {
+        synchronized(this@RecordingIndex) {
+            check(corpusGeneration == generation) { "The recording library changed. Please ask again." }
+            buildJsonObject {
+                put("body", readSessionBody(recordingId)?.let(json::parseToJsonElement) ?: JsonNull)
+                put("invalidated", recordingId == null && db.rawQuery("SELECT 1 FROM assistant_context_invalidated", null).use { it.moveToFirst() })
+            }
+        }
+    }
+
+    suspend fun writeAssistantBody(recordingId: String?, generation: Long, body: JsonObject, reset: Boolean) = withContext(Dispatchers.IO) {
+        synchronized(this@RecordingIndex) {
+            check(corpusGeneration == generation) { "The recording library changed. Please ask again." }
+            transaction {
+                if (recordingId == null) {
+                    if (reset) db.delete("sessions", null, null)
+                    db.execSQL("INSERT OR REPLACE INTO sessions VALUES(?,?,?)", arrayOf<Any?>(body.getValue("id").jsonPrimitive.content, body.toString(), System.currentTimeMillis()))
+                    db.delete("assistant_context_invalidated", null, null)
+                } else {
+                    db.execSQL("INSERT OR REPLACE INTO recording_sessions VALUES(?,?)", arrayOf(recordingId, body.toString()))
+                }
+            }
+        }
+    }
+    suspend fun clearSessions(recordingId: String? = null) = withContext(Dispatchers.IO) {
+        synchronized(this@RecordingIndex) {
+            if (recordingId == null) {
+                db.delete("sessions", null, null)
+                db.delete("assistant_context_invalidated", null, null)
+            }
+            else db.delete("recording_sessions", "recording_id=?", arrayOf(recordingId))
+            Unit
+        }
+    }
+
+    fun toolsFor(recordingId: String?): RecordingTools = if (recordingId == null) this else object : RecordingTools {
+        override suspend fun execute(name: String, arguments: JsonObject): JsonObject {
+            require(arguments["recordingId"]?.let { it == JsonPrimitive(recordingId) } != false)
+            return this@RecordingIndex.execute(name, JsonObject(arguments + ("recordingId" to JsonPrimitive(recordingId))))
+        }
+
+        override suspend fun resolve(ref: RecordingCitation): RecordingCitation? =
+            ref.takeIf { it.recordingId == recordingId }?.let { this@RecordingIndex.resolve(it) }
+    }
     suspend fun count() = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) { db.rawQuery("SELECT count(*) FROM recordings",null).use { it.moveToFirst();it.getInt(0) } } }
 
     override suspend fun execute(name: String, arguments: JsonObject): JsonObject = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) { query(name, arguments) } }
@@ -165,7 +248,12 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
             }
         }
         return buildJsonObject { put(if(isEvidence)"evidence" else "items",JsonArray(items));put("hasMore",more);put("nextOffset",offset+items.size)
-            if(name=="list_highlights") put("unreadRecordingCount",db.rawQuery("SELECT count(*) FROM recordings WHERE highlights_known=0",null).use {it.moveToFirst();it.getInt(0)})
+            if(name=="list_highlights") {
+                val id = str("recordingId")
+                db.rawQuery("SELECT count(*) FROM recordings WHERE highlights_known=0" + if (id == null) "" else " AND id=?", id?.let { arrayOf(it) }).use {
+                    it.moveToFirst(); put("unreadRecordingCount", it.getInt(0))
+                }
+            }
         }
     }
     override suspend fun resolve(ref: RecordingCitation): RecordingCitation? = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) {

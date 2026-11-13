@@ -59,11 +59,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val message = mutableMessage.asStateFlow()
     private val mutableAsking = MutableStateFlow(false)
     val asking = mutableAsking.asStateFlow()
-    val assistant = app.assistant.state
-    fun askAssistant(question: String) = app.assistant.ask(question)
-    fun cancelAssistant() = app.assistant.cancel()
-    fun newAssistantSession() = app.assistant.newSession()
-    fun clearAssistantHistory() = app.assistant.clearHistory()
+    fun assistantState(recordingId: String?) = app.assistant.stateFor(recordingId)
+    fun askAssistant(question: String, recordingId: String?) = app.assistant.ask(question, recordingId)
+    fun cancelAssistant(recordingId: String?, runId: String?) = app.assistant.cancel(recordingId, runId)
+    fun clearAssistantHistory(recordingId: String?) = app.assistant.clearHistory(recordingId)
     fun openCitation(ref: dev.soundsoftware.core.agent.RecordingCitation) = viewModelScope.launch {
         val valid = app.recordingIndex.resolve(ref)
         val r = app.repository.get(ref.recordingId)
@@ -147,6 +146,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteRecording(id: String) = viewModelScope.launch {
         if (playback.value.recordingId == id) app.playback.release()
         app.processor.deleteRecording(id)
+        app.assistant.recordingDeleted(id)
         stack.value = listOf(Screen.Main)
     }
 

@@ -42,11 +42,12 @@ class Playback(private val scope: CoroutineScope) {
 
     fun play(fromMs: Long? = null) {
         val p = player ?: return
-        if (fromMs != null) p.seekTo(fromMs.coerceIn(0, p.duration.toLong()).toInt())
+        val target = fromMs?.coerceIn(0, p.duration.toLong())
+        if (target != null) p.seekTo(target, MediaPlayer.SEEK_CLOSEST)
         else if (p.currentPosition >= p.duration - 50) p.seekTo(0)
         runCatching { p.playbackParams = p.playbackParams.setSpeed(mutable.value.speed) }
         p.start()
-        mutable.update { it.copy(playing = true, positionMs = p.currentPosition.toLong()) }
+        mutable.update { it.copy(playing = true, positionMs = target ?: p.currentPosition.toLong()) }
         ticker?.cancel()
         ticker = scope.launch {
             while (isActive) {

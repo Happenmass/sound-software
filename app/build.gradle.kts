@@ -7,6 +7,17 @@ plugins {
 val includeSpeakerWorker = providers.gradleProperty("includeSpeakerWorker").getOrElse("false").toBoolean()
 val includeSpeakerNpu = providers.gradleProperty("includeSpeakerNpu").getOrElse("false").toBoolean()
 val includeQwenHtp = providers.gradleProperty("includeQwenHtp").getOrElse("false").toBoolean()
+val includePi = providers.gradleProperty("includePi").getOrElse("false").toBoolean()
+val preparePi by tasks.registering(Exec::class) {
+    val source = rootProject.file("tools/pi-agent")
+    val sdk = android.sdkDirectory
+    val jni = layout.buildDirectory.dir("generated/piJni")
+    val assets = layout.buildDirectory.dir("generated/piAssets")
+    inputs.files(fileTree(source) { include("*.mjs", "*.json", "*.cc", "*.py") })
+    outputs.dirs(jni, assets)
+    commandLine("python3", source.resolve("build.py"), "--ndk", sdk.resolve("ndk/28.2.13676358"),
+        "--jni", jni.get().asFile, "--assets", assets.get().asFile)
+}
 val includeAsrWeights = providers.gradleProperty("includeAsrWeights").getOrElse("false").toBoolean()
 val prepareAsrWeights by tasks.registering(Exec::class) {
     val output = layout.buildDirectory.dir("generated/bundledAsrAssets")
@@ -55,10 +66,11 @@ android {
         buildConfigField("boolean", "SPEAKER_WORKER_ENABLED", includeSpeakerWorker.toString())
         buildConfigField("boolean", "SPEAKER_NPU_ENABLED", includeSpeakerNpu.toString())
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
+        buildConfigField("boolean", "PI_ENABLED", includePi.toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
-        versionCode = 8
-        versionName = "0.1.6"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 9
+        versionName = "0.1.7"
+        testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -68,7 +80,10 @@ android {
             versionNameSuffix = ""
             isDebuggable = false
         }
-        debug { versionNameSuffix = "-dev" }
+        debug {
+            versionNameSuffix = "-dev"
+            applicationIdSuffix = providers.gradleProperty("debugApplicationIdSuffix").orNull
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -86,6 +101,11 @@ android {
     if (includeQwenHtp) {
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qwenHtpJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenHtpAssets"))
+    }
+    if (includePi) {
+        sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/piJni"))
+        sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/piAssets"))
+        packaging.jniLibs.pickFirsts += "**/libc++_shared.so"
     }
     if (includeSpeakerWorker) sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerJni"))
     if (includeSpeakerNpu) {
@@ -114,6 +134,7 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
@@ -122,6 +143,7 @@ if (includeSpeakerWorker) tasks.named("preBuild").configure { dependsOn(prepareS
 if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu, prepareSpeakerNpuNotices) }
 
 if (includeQwenHtp) tasks.named("preBuild").configure { dependsOn(prepareQwenHtp) }
+if (includePi) tasks.named("preBuild").configure { dependsOn(preparePi) }
 
 if (includeAsrWeights) {
     require(includeQwenHtp) { "Bundled ASR weights require the Qwen NPU engine." }

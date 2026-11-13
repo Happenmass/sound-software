@@ -44,9 +44,11 @@ Close and reopen the app after installing the models. Speaker acceleration is se
 
 Qwen3-ASR uses an isolated QAIRT 2.51 runtime and ONNX Runtime 1.29. Speaker diarization has a separate optional HTP path using QNN 2.50.
 
+The public APK includes the on-device Pi assistant runtime. Install Node.js 22.19 or newer, Python 3.11 or newer, and Android NDK 28.2.13676358.
+
 ```sh
 bash tools/setup-dependencies.sh
-./gradlew :app:assembleRelease -PincludeQwenHtp=true -PincludeSpeakerNpu=true -PincludeAsrWeights=true \
+./gradlew :app:assembleRelease -PincludeQwenHtp=true -PincludeSpeakerNpu=true -PincludeAsrWeights=true -PincludePi=true \
   -Dorg.gradle.jvmargs="-Xmx5g -Dfile.encoding=UTF-8"
 ```
 

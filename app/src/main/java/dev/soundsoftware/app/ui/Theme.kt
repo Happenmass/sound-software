@@ -106,6 +106,7 @@ object Icons {
     val Search = icon("search", circle(11f, 11f, 7f), "M20 20l-3.5-3.5", stroke = 2.2f)
     val SearchThin = icon("search", circle(11f, 11f, 7f), "M20 20l-3.5-3.5")
     val Download = icon("download", "M12 4v12M6 11l6 6 6-6M5 20h14", stroke = 2.4f)
+    val ArrowDown = icon("arrowDown", "M12 5v14M6 13l6 6 6-6", stroke = 2.2f)
     val Share = icon("share", "M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6")
     val More = icon("more", circle(5f, 12f, 1.8f), circle(12f, 12f, 1.8f), circle(19f, 12f, 1.8f), filled = true)
     val Chevron = icon("chevron", "M9 6l6 6-6 6")

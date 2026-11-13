@@ -21,6 +21,7 @@ import java.io.File
 
 class ChatExportTest {
     @get:Rule val compose=createComposeRule()
+    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test fun processAndEachToolCanExpandAndCollapseWithoutChangingAnswer() {
         val trace=listOf(
@@ -28,14 +29,14 @@ class ChatExportTest {
             AgentTraceStep(1,"tool","搜索录音片段",detail="返回 1 项结果",status="done",toolName="search_recordings",arguments="""{"query":"上线"}""",result="""{"evidence":[{"quote":"测试用原文片段"}]}"""))
         compose.setContent {SoundTheme {AssistantTrace(trace)}}
         compose.onNodeWithText("搜索录音片段").assertDoesNotExist()
-        compose.onNodeWithText("展开 ∨").performClick()
+        compose.onNodeWithText(context.getString(dev.soundsoftware.app.R.string.expand)).performClick()
         compose.onNodeWithText("搜索录音片段").assertIsDisplayed()
         compose.onNodeWithText("测试用原文片段",substring=true).assertDoesNotExist()
-        compose.onNodeWithText("search_recordings · 查看参数与结果 ∨").performClick()
+        compose.onNodeWithText("search_recordings · ${context.getString(dev.soundsoftware.app.R.string.show_tool_details)}").performClick()
         compose.onNodeWithText("测试用原文片段",substring=true).assertIsDisplayed()
         val screenshot=File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"chat-export-validation/process-expanded.png").apply {parentFile!!.mkdirs()}
         screenshot.outputStream().use {compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG,100,it)}
-        compose.onNodeWithText("收起 ∧").performClick()
+        compose.onNodeWithText(context.getString(dev.soundsoftware.app.R.string.collapse)).performClick()
         compose.onNodeWithText("测试用原文片段",substring=true).assertDoesNotExist()
         val collapsed=File(screenshot.parentFile,"process-collapsed.png")
         collapsed.outputStream().use {compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG,100,it)}
@@ -43,7 +44,8 @@ class ChatExportTest {
 
     @Test fun stoppedWorkIsClearlyMarked() {
         compose.setContent {SoundTheme {AssistantTrace(listOf(AgentTraceStep(0,"model","分析问题与规划检索",detail="已停止",status="cancelled")))}}
-        compose.onNodeWithText("思考与检索过程 · 已停止").assertIsDisplayed()
+        compose.onNodeWithText(context.getString(dev.soundsoftware.app.R.string.assistant_process,
+            context.getString(dev.soundsoftware.app.R.string.stopped))).assertIsDisplayed()
     }
 
     @Test fun documentAndAudioAlwaysShareAsSeparateSingleFilesWithReadableUris() {

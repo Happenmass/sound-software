@@ -17,6 +17,36 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class RecordingIndexTest {
+    @Test fun recordingSessionsScopeEveryToolAndDeleteWithoutErasingGlobalAnswers() = runBlocking { fixture { index, _ ->
+        val a = recording("a")
+        val b = recording("b")
+        index.upsert(a)
+        index.upsert(b)
+        val first = AgentSession(turns = listOf(AgentTurn("Private A", "Answer A")))
+        val second = AgentSession(turns = listOf(AgentTurn("Private B", "Answer B")))
+        val evidence = json.decodeFromJsonElement<RecordingCitation>(search(index, "上线").getValue("evidence").jsonArray.first())
+        val global = AgentSession(turns = listOf(AgentTurn("Global", "Keep this answer", listOf(evidence))),
+            memory = "Old memory", contextMessages = listOf(AgentMessage("user", "Old context")))
+        index.saveSession(first, a.id)
+        index.saveSession(second, b.id)
+        index.saveSession(global)
+        index.upsert(a.copy(title = "New title"))
+        assertEquals(first, index.latestSession(a.id))
+        assertEquals(second, index.latestSession(b.id))
+        assertEquals(global, index.latestSession())
+        val tools = index.toolsFor(a.id)
+        val scoped = tools.execute("search_recordings", buildJsonObject { put("query", "上线") })
+        assertEquals(a.id, scoped.getValue("evidence").jsonArray.single().jsonObject.getValue("recordingId").jsonPrimitive.content)
+        assertTrue(runCatching { tools.execute("read_segments", buildJsonObject { put("recordingId", b.id) }) }.isFailure)
+        index.remove(evidence.recordingId)
+        assertNull(index.latestSession(evidence.recordingId))
+        assertNull(index.resolve(evidence))
+        val saved = index.latestSession()!!
+        assertEquals(global.turns, saved.turns)
+        assertTrue(saved.contextMessages.isEmpty())
+        assertTrue(saved.memory.isEmpty())
+    } }
+
     private val json=Json {ignoreUnknownKeys=true}
     private suspend fun fixture(block:suspend (RecordingIndex,File)->Unit) {
         val base=InstrumentationRegistry.getInstrumentation().targetContext

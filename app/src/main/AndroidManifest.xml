@@ -30,6 +30,7 @@
         </activity>
         <service android:name=".WorkService" android:exported="false"
             android:foregroundServiceType="dataSync|mediaProcessing|connectedDevice" />
+        <service android:name=".agent.PiNodeService" android:exported="false" android:process=":pi" />
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.exports"
             android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/exports" />

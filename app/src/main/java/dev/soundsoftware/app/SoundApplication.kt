@@ -48,16 +48,24 @@ class SoundApplication : Application() {
     private val bluetoothAllowed = MutableStateFlow(false)
     internal lateinit var autoSyncRequested: StateFlow<Boolean>; private set
     internal var workServiceActive = false
+    internal var instrumentationDataDir: File? = null
     val modelDir: File get() = File(getExternalFilesDir(null), "models")
 
     override fun onCreate() {
         super.onCreate()
+        val process = if (Build.VERSION.SDK_INT >= 28) getProcessName()
+            else File("/proc/self/cmdline").inputStream().buffered().use { input ->
+                buildString { var byte = input.read(); while (byte > 0) { append(byte.toChar()); byte = input.read() } }
+            }
+        if (process == "$packageName:pi") return
         // App-owned model folders, so files later pushed by adb or a model installer stay readable.
         File(modelDir, "diarization").mkdirs()
         settings = SettingsStore(this)
-        recordingIndex = dev.soundsoftware.app.agent.RecordingIndex(File(filesDir, "recordings.db"))
-        repository = RecordingRepository(filesDir, recordingIndex)
-        assistant = dev.soundsoftware.app.agent.AgentController(recordingIndex, settings, scope)
+        val dataDir = if (BuildConfig.DEBUG) instrumentationDataDir ?: filesDir else filesDir
+        recordingIndex = dev.soundsoftware.app.agent.RecordingIndex(File(dataDir, "recordings.db"))
+        repository = RecordingRepository(dataDir, recordingIndex)
+        assistant = dev.soundsoftware.app.agent.AgentController(recordingIndex, settings, scope,
+            if (BuildConfig.PI_ENABLED) dev.soundsoftware.app.agent.PiAgentLoop(this) else null)
         playback = Playback(scope)
         processor = Processor(repository, settings, modelDir, File(filesDir, "checkpoints"), scope, diarizer=dev.soundsoftware.app.inference.SherpaDiarizer.forDevice(this,File(modelDir,"diarization")), qwenHtpFiles = dev.soundsoftware.app.inference.QwenHtpFiles(this, modelDir), notify = ::notifyDone)
         devices = DeviceManager(DeviceLinkFactory.create(this), settings, repository, scope) { id ->
