@@ -4,7 +4,7 @@ import dev.soundsoftware.core.model.*
 
 /** Reassign identity only; original words, timing, edits, title, notes and QA are not regenerated. */
 object SpeakerReanalysis {
-    fun commit(base: Recording, current: Recording, turns: List<SpeakerTurn>, warnings: List<String>, count: Int?, now: Long): Recording {
+    fun commit(base: Recording, current: Recording, turns: List<SpeakerTurn>, warnings: List<String>, count: Int?, now: Long, speakerHtpExecutions: Int = 0): Recording {
         require(base.transcript != null) { "请先生成逐字稿" }
         require(current.transcript == base.transcript && current.speakers == base.speakers) { "文字或说话人在计算期间已修改，本次结果未覆盖，请重试" }
         val (segments, fresh) = assignSpeakers(base.transcript.segments, turns)
@@ -31,7 +31,8 @@ object SpeakerReanalysis {
         val speakerWarnings=listOf("说话人分离模型未安装","说话人分离未完成：","干净语音不足","部分短应答或噪声")
         return current.copy(
             transcript=base.transcript.copy(segments=segments.map {it.copy(speakerId=it.speakerId?.let(ids::get))},
-                warnings=base.transcript.warnings.filterNot {w->speakerWarnings.any(w::startsWith)}+warnings),
+                warnings=base.transcript.warnings.filterNot {w->speakerWarnings.any(w::startsWith)}+warnings,
+                speakerHtpExecutions = speakerHtpExecutions),
             speakers=speakers,options=(current.options ?: TranscribeOptions()).copy(speakerCount=count),
             speakerAnalysis=SpeakerAnalysis(SpeakerClustering.VERSION,now,count,speakers.size),
         )

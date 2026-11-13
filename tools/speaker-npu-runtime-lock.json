@@ -47,5 +47,11 @@
   },
   "validatedDeviceModels": [
     "PNM-AN10"
-  ]
+  ],
+  "sdkUrl": "https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.50.0.260828/v2.50.0.260828.zip",
+  "notices": {
+    "LICENSE.pdf": "ec1dccfdcba5c6e64126e84199b8362bf4999107bfa567ebe831dbb4c461692b",
+    "NOTICE.txt": "0c5e8aad3506d0ab881cabaf0dae8de64e1784dc1ee6c873caf24a78fbf01924",
+    "QNN_NOTICE.txt": "0c5e8aad3506d0ab881cabaf0dae8de64e1784dc1ee6c873caf24a78fbf01924"
+  }
 }

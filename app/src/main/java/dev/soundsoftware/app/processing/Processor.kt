@@ -151,10 +151,14 @@ class Processor(
             repository.update(id) { it.copy(stage = ProcessingStage.TRANSCRIBING, stageText = settings.text(R.string.preparing), error = null) }
             val warnings = mutableListOf<String>()
             var turns: List<SpeakerTurn>? = null
+            var speakerHtpExecutions = 0
             if (diarizer.isReady && wav.durationMs <= SherpaDiarizer.MAX_DURATION_MS) {
                 progress(id, ProcessingStage.DIARIZING, 0f, settings.text(R.string.analyzing_speakers))
                 turns = runCatching {
-                    withContext(Dispatchers.Default) { runDiarization(wav, options.speakerCount) { f -> progress(id, ProcessingStage.DIARIZING, f * 0.25f, settings.text(R.string.analyzing_speakers)) } }.also { warnings += it.warnings }.turns
+                    withContext(Dispatchers.Default) { runDiarization(wav, options.speakerCount) { f -> progress(id, ProcessingStage.DIARIZING, f * 0.25f, settings.text(R.string.analyzing_speakers)) } }.also {
+                        warnings += it.warnings
+                        speakerHtpExecutions = if (it.turns.isEmpty()) 0 else it.npu?.htpExecutions ?: 0
+                    }.turns
                 }.onFailure { if (it is CancellationException) throw it; warnings += settings.text(R.string.speaker_analysis_failed, it.message) }.getOrNull()
                     ?.let { mergeTurns(it) }?.takeIf { it.isNotEmpty() }
             } else if (!diarizer.isReady) warnings += settings.text(R.string.speaker_models_missing)
@@ -167,7 +171,7 @@ class Processor(
                 val (assigned, list) = assignSpeakers(segments, turns); segments = assigned; speakers = list
             }
             val transcript = Transcript(segments, result.provenance.model, result.provenance.backend, result.timestampQuality.name,
-                System.currentTimeMillis(), warnings + result.warnings)
+                System.currentTimeMillis(), warnings + result.warnings, speakerHtpExecutions)
             val wantsSummary = options.template != SceneTemplate.TRANSCRIPT_ONLY && llmReady()
             val saved = repository.update(id) { it.copy(transcript = transcript, speakers = speakers, summary = null, qa = emptyList(),
                 stage = if (wantsSummary) ProcessingStage.SUMMARIZING else ProcessingStage.DONE,
@@ -284,7 +288,8 @@ class Processor(
                 val after=withContext(Dispatchers.IO) { dev.soundsoftware.core.asr.AudioInput.fromWav(audio,id).sha256 }
                 check(before==after) { settings.text(R.string.audio_changed) }
                 repository.update(id) { current ->
-                    dev.soundsoftware.core.transcript.SpeakerReanalysis.commit(base,current,result.turns,result.warnings,count,System.currentTimeMillis())
+                    dev.soundsoftware.core.transcript.SpeakerReanalysis.commit(base,current,result.turns,result.warnings,count,System.currentTimeMillis(),
+                        speakerHtpExecutions = result.npu?.htpExecutions ?: 0)
                         .copy(stage=ProcessingStage.DONE,stageText=null,progress=null,error=null)
                 }
             } catch(e: CancellationException) {

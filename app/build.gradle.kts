@@ -29,14 +29,18 @@ val prepareQnnNative by tasks.registering(Exec::class) {
     outputs.dir(layout.buildDirectory.dir("generated/qnnJni"))
     commandLine("python3",rootProject.file("tools/prepare-qnn-runtime.py"),"--output",layout.buildDirectory.dir("generated/qnnJni").get().asFile)
 }
-val prepareQnnNotices by tasks.registering(Exec::class) {
-    val output = layout.buildDirectory.dir("generated/qnnNotices")
-    val sdkNotices = file(System.getProperty("user.home") + "/.cache/codex/dependencies/qairt/2.40.0/notices")
-    inputs.files(rootProject.file("tools/prepare-qnn-notices.py"), rootProject.file("tools/qnn-runtime-lock.json"))
-    inputs.files(sdkNotices.resolve("LICENSE.pdf"), sdkNotices.resolve("NOTICE.txt"), sdkNotices.resolve("QNN_NOTICE.txt"))
-    outputs.dir(output)
-    commandLine("python3", rootProject.file("tools/prepare-qnn-notices.py"), "--output", output.get().asFile)
-}
+fun registerQnnNotices(taskName: String, sdk: String, cachePath: String, lockName: String) =
+    tasks.register<Exec>(taskName) {
+        val output = layout.buildDirectory.dir("generated/$taskName")
+        val sdkNotices = file(System.getProperty("user.home") + "/.cache/codex/dependencies/qairt/$cachePath")
+        inputs.files(rootProject.file("tools/prepare-qnn-notices.py"), rootProject.file("tools/$lockName"))
+        inputs.files(sdkNotices.resolve("LICENSE.pdf"), sdkNotices.resolve("NOTICE.txt"), sdkNotices.resolve("QNN_NOTICE.txt"))
+        outputs.dir(output)
+        commandLine("python3", rootProject.file("tools/prepare-qnn-notices.py"), "--sdk", sdk, "--output", output.get().asFile)
+    }
+val prepareQnnNotices = registerQnnNotices("qnnNotices", "2.40", "2.40.0/notices", "qnn-runtime-lock.json")
+val prepareSpeakerNpuNotices = registerQnnNotices("speakerNpuNotices", "2.50",
+    "2.50.0/sdk/qairt/2.50.0.260828", "speaker-npu-runtime-lock.json")
 android {
     namespace = "dev.soundsoftware.app"
     compileSdk = 35
@@ -47,8 +51,8 @@ android {
         buildConfigField("boolean", "QNN_ENABLED", includeQnn.toString())
         buildConfigField("boolean", "SPEAKER_WORKER_ENABLED", includeSpeakerWorker.toString())
         buildConfigField("boolean", "SPEAKER_NPU_ENABLED", includeSpeakerNpu.toString())
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
@@ -70,11 +74,12 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
-        jniLibs.keepDebugSymbols += setOf("**/libsound_qnn_runner.so", "**/libQnn*.so")
+        jniLibs.keepDebugSymbols += setOf("**/libsound_qnn_runner.so", "**/libsound_speaker_npu_worker.so", "**/libQnn*.so")
     }
     if (includeQnn) sourceSets.getByName("androidTest").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerProbeJni"))
     if (includeSpeakerWorker) sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerJni"))
     if (includeSpeakerNpu) {
+        sourceSets.getByName("release").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuNotices"))
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerNpuJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuAssets"))
     }
@@ -113,4 +118,4 @@ if (includeQnn) {
 if (includeSpeakerWorker) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNative) }
 if (includeQnn) tasks.matching { it.name == "mergeDebugAndroidTestJniLibFolders" }.configureEach { dependsOn(prepareSpeakerProbe) }
 
-if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu) }
+if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu, prepareSpeakerNpuNotices) }

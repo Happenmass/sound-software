@@ -38,7 +38,7 @@ bash tools/setup-dependencies.sh
 
 未签名包输出至 `app/build/outputs/apk/release/app-release-unsigned.apk`。日常开发可运行 `./gradlew :app:assembleDebug`。分发前请用自己的 Android 签名密钥签名。
 
-Release 提供 CPU 包与 SenseVoice NPU 包。NPU 包适用于 SM8850、4 KB 内存页的手机，Qwen3-ASR 仍使用 CPU。模型安装和高通 HTP 构建见[模型配置](docs/MODELS.md)。
+Release 提供 CPU 包与 NPU 包。NPU 包支持 SM8850、4 KB 内存页的 SenseVoice 转写，并在已验证的荣耀 Magic V6 上加速说话人声纹提取。Qwen3-ASR 使用 CPU。模型安装和高通 HTP 构建见[模型配置](docs/MODELS.md)。
 
 ## 许可证
 

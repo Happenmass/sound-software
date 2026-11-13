@@ -83,11 +83,11 @@ qnn-context-binary-generator --backend ./libQnnHtp.so --model ./libQnnModelDlc.s
 
 ```sh
 python3 tools/diarization-worker/build-npu.py
-./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PincludeSpeakerNpu=true
 python3 tools/deploy-speaker-npu-models.py --serial SERIAL
 ```
 
-`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP，不替换 ASR 2.40。`-PincludeSpeakerNpu=false` 保留 CPU 并行与 ASR QNN，`-PincludeQnn=false` 默认同时关闭 NPU 打包以保留原纯 CPU 构建；可显式单独开启 speaker NPU。当前只有锁文件的 `validatedDeviceModels` 中的 PNM-AN10 自动启用，且时长至少 20 秒；权重缺失时走 CPU。权重约 49MB，另行部署，不在 APK 中。
+`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP，不替换 ASR 2.40。`-PincludeSpeakerNpu=false` 保留 CPU 并行与 ASR QNN，`-PincludeQnn=false` 默认同时关闭 NPU 打包以保留原纯 CPU 构建；可显式单独开启 speaker NPU。当前只有锁文件的 `validatedDeviceModels` 中的 PNM-AN10 自动启用，且时长至少 20 秒；权重缺失时走 CPU。权重约 49MB，另行部署，不在 APK 中。安装公开版后，用 `--package dev.soundsoftware.app.release` 部署模型。构建时从同版 SDK 根目录验证并复制原始许可及声明。
 
 ## NPU 真机验收
 

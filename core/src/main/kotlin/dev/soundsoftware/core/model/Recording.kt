@@ -61,6 +61,7 @@ data class TranscribeOptions(
     val effectiveLanguage: String? get() = if (mixedChineseEnglish) null else language
 }
 
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
 data class Transcript(
     val segments: List<Segment>,
@@ -69,6 +70,9 @@ data class Transcript(
     val timestampQuality: String,
     val createdAt: Long,
     val warnings: List<String> = emptyList(),
+    /** Successfully executed HTP voice embedding graphs from the current speaker analysis. */
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val speakerHtpExecutions: Int = 0,
 )
 
 @Serializable

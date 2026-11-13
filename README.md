@@ -38,7 +38,7 @@ bash tools/setup-dependencies.sh
 
 The unsigned APK is at `app/build/outputs/apk/release/app-release-unsigned.apk`. To build a locally signed development APK, run `./gradlew :app:assembleDebug`. To distribute a release, align and sign it with your own Android signing key.
 
-Releases offer a CPU APK and a SenseVoice NPU APK for SM8850 phones with 4 KB memory pages. Qwen3-ASR uses CPU. See [model and runtime setup](docs/MODELS.md) for model installation and Qualcomm HTP build instructions.
+Releases offer a CPU APK and an NPU APK for SM8850 phones with 4 KB memory pages. The NPU APK accelerates SenseVoice transcription and speaker embeddings on the verified HONOR Magic V6. Qwen3-ASR uses CPU. See [model and runtime setup](docs/MODELS.md) for model installation and Qualcomm HTP build instructions.
 
 ## License
 
