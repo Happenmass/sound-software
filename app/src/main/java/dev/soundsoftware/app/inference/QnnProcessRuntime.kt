@@ -14,7 +14,12 @@ data class QnnDevice(val soc:String,val arm64:Boolean,val emulator:Boolean,val p
     val supportsSm8850Htp: Boolean
         get() = arm64 && !emulator && soc.startsWith("SM8850", ignoreCase = true) && pageSize == 4096L
 }
-data class QnnFiles(val nativeDir:File,val modelDir:File) {
+class QnnFiles(val nativeDir: File, private val externalModels: File, context: Context? = null) {
+    private val bundled = context?.let { BundledAsrModel(it, externalModels) }
+    private val modelDir get() = bundled?.directory ?: externalModels
+
+    suspend fun prepareModels() { bundled?.prepare() }
+
     val executable get()=File(nativeDir,"libsound_qnn_runner.so")
     val model get()=File(modelDir,"model.bin")
     val tokens get()=File(modelDir,"tokens.txt")
@@ -32,11 +37,11 @@ data class QnnFiles(val nativeDir:File,val modelDir:File) {
         device.pageSize!=4096L -> "当前QNN组合仅验证4KB内存页设备"
         !executable.canExecute() -> "QNN子进程组件未安装"
         !runtimeLibraries -> "QNN运行库不完整"
-        listOf(model, tokens).any { !it.isFile || !it.canRead() || it.length() == 0L } -> "请部署SM8850专用10秒SenseVoice QNN模型"
+        bundled?.available != true && listOf(model, tokens).any { !it.isFile || !it.canRead() || it.length() == 0L } -> "请部署SM8850专用10秒SenseVoice QNN模型"
         else -> null
     }
     companion object {
-        fun from(context:Context,modelDir:File)=QnnFiles(File(context.applicationInfo.nativeLibraryDir),File(modelDir,"sensevoice-qnn-sm8850"))
+        fun from(context:Context,modelDir:File)=QnnFiles(File(context.applicationInfo.nativeLibraryDir),File(modelDir,"sensevoice-qnn-sm8850"), context)
         fun device()=QnnDevice(if(Build.VERSION.SDK_INT>=31)Build.SOC_MODEL else "",Build.SUPPORTED_ABIS.contains("arm64-v8a"),
             Build.HARDWARE in setOf("ranchu","goldfish") || Build.FINGERPRINT.startsWith("generic"),Os.sysconf(OsConstants._SC_PAGESIZE))
     }
@@ -61,6 +66,7 @@ class QnnProcessRuntime(private val files:QnnFiles,private val cache:File,privat
     override suspend fun prepare() {
         currentCoroutineContext().ensureActive();check(!closed && !failed)
         files.unavailable(device)?.let{throw AsrException(ErrorCode.BACKEND_UNAVAILABLE,it)}
+        files.prepareModels()
         cache.mkdirs();prepared=true
     }
     private suspend fun frame():Pair<String,String> {

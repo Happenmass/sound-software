@@ -23,7 +23,9 @@ class QwenHtpFiles(context: Context, modelRoot: File) {
     private val nativeDir = File(app.applicationInfo.nativeLibraryDir)
     val executable = File(nativeDir, "libsound_qwen_htp_worker.so")
     val runtimeDir = File(app.codeCacheDir, "qwen-htp-2.51.0-v1")
-    val modelDir = File(modelRoot, "qwen-htp-sm8850")
+    private val externalModels = File(modelRoot, "qwen-htp-sm8850")
+    private val bundled = BundledAsrModel(app, externalModels)
+    val modelDir get() = bundled.directory
     private val manifest by lazy {
         JSONObject(app.assets.open("qwen-htp-manifest.json").bufferedReader().use { it.readText() })
     }
@@ -35,13 +37,18 @@ class QwenHtpFiles(context: Context, modelRoot: File) {
         if (!BuildConfig.QWEN_HTP_ENABLED || !executable.canExecute())
             return app.getString(R.string.qwen_htp_not_bundled)
         if (!supported()) return app.getString(R.string.qwen_htp_device)
-        if (!complete(modelDir, manifest.getJSONObject("models")))
+        if (!bundled.available && !complete(externalModels, manifest.getJSONObject("models")))
             return app.getString(R.string.qwen_htp_models)
         return null
     }
 
-    fun prepare() = synchronized(extractionLock) {
+    suspend fun prepare() {
         unavailable()?.let { throw AsrException(ErrorCode.BACKEND_UNAVAILABLE, it) }
+        bundled.prepare()
+        prepareRuntime()
+    }
+
+    private fun prepareRuntime() = synchronized(extractionLock) {
         val libraries = manifest.getJSONObject("libraries")
         if (complete(runtimeDir, libraries)) return@synchronized
         check(runtimeDir.isDirectory || runtimeDir.mkdirs())

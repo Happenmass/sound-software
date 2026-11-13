@@ -8,6 +8,14 @@ val includeQnn = providers.gradleProperty("includeQnn").getOrElse("false").toBoo
 val includeSpeakerWorker = providers.gradleProperty("includeSpeakerWorker").getOrElse(includeQnn.toString()).toBoolean()
 val includeSpeakerNpu = providers.gradleProperty("includeSpeakerNpu").getOrElse((includeQnn && includeSpeakerWorker).toString()).toBoolean()
 val includeQwenHtp = providers.gradleProperty("includeQwenHtp").getOrElse("false").toBoolean()
+val includeAsrWeights = providers.gradleProperty("includeAsrWeights").getOrElse("false").toBoolean()
+val prepareAsrWeights by tasks.registering(Exec::class) {
+    val output = layout.buildDirectory.dir("generated/bundledAsrAssets")
+    inputs.files(rootProject.file("tools/prepare-bundled-asr.py"), rootProject.file("tools/qwen-npu-worker/artifacts.json"),
+        rootProject.file("tools/model-validation/artifacts.json"))
+    outputs.dir(output)
+    commandLine("python3", rootProject.file("tools/prepare-bundled-asr.py"), "--output", output.get().asFile)
+}
 val prepareQwenHtp by tasks.registering(Exec::class) {
     val worker = rootProject.file("tools/qwen-npu-worker")
     val jni = layout.buildDirectory.dir("generated/qwenHtpJni")
@@ -61,8 +69,9 @@ android {
         buildConfigField("boolean", "SPEAKER_WORKER_ENABLED", includeSpeakerWorker.toString())
         buildConfigField("boolean", "SPEAKER_NPU_ENABLED", includeSpeakerNpu.toString())
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
-        versionCode = 6
-        versionName = "0.1.4"
+        buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
+        versionCode = 7
+        versionName = "0.1.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
@@ -81,11 +90,13 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
+    if (includeAsrWeights) androidResources.noCompress += listOf("bin", "onnx")
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
         jniLibs.keepDebugSymbols += setOf("**/libsound_qnn_runner.so", "**/libsound_qwen_htp_worker.so", "**/libsound_speaker_npu_worker.so", "**/libQnn*.so")
     }
+    if (includeAsrWeights) sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/bundledAsrAssets"))
     if (includeQwenHtp) {
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qwenHtpJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenHtpAssets"))
@@ -135,3 +146,8 @@ if (includeQnn) tasks.matching { it.name == "mergeDebugAndroidTestJniLibFolders"
 if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu, prepareSpeakerNpuNotices) }
 
 if (includeQwenHtp) tasks.named("preBuild").configure { dependsOn(prepareQwenHtp) }
+
+if (includeAsrWeights) {
+    require(includeQnn && includeQwenHtp) { "Bundled ASR weights require both NPU engines." }
+    tasks.named("preBuild").configure { dependsOn(prepareAsrWeights) }
+}

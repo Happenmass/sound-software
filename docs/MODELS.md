@@ -1,12 +1,14 @@
 # Local models and NPU
 
-On-device transcription in current builds uses a compatible NPU. Install the Qwen3-ASR or SenseVoice weights separately. On other devices, transcription requires an explicitly configured and selected remote service. The app lists compatible Qwen3-ASR and SenseVoice NPU models and shows their installation status.
+On-device transcription in current builds uses a compatible NPU. The signed v0.1.5 NPU APK bundles Qwen3-ASR and SenseVoice weights. On other devices, transcription requires an explicitly configured and selected remote service. The app lists compatible Qwen3-ASR and SenseVoice NPU models and shows their installation status.
 
 ## Transcription models
 
-The signed NPU APK includes the runtimes for both models. Local transcription targets ARM64 SM8850 with 4 KB memory pages and was tested on the HONOR Magic V6. Model weights stay outside the APK. Choose the installed model in **Settings → Default transcription settings** or in the settings for an individual recording.
+The signed NPU APK includes the runtimes for both models. Local transcription targets ARM64 SM8850 with 4 KB memory pages and was tested on the HONOR Magic V6. On first use, the app prepares the selected model from the APK in app-private storage. Allow about 900 MB of additional space for Qwen3-ASR and 255 MB for SenseVoice. Existing matching model files can be reused. Choose the installed model in **Settings → Default transcription settings** or in the settings for an individual recording.
 
-Install Python 3.12 or later and Android Platform Tools on your computer. Enable USB debugging, connect the phone, and open the public app once. If more than one device is connected, set `ANDROID_SERIAL` to the target shown by `adb devices`.
+### Source build inputs and separate model setup
+
+For a source build with bundled weights, use the pinned model downloads below. The download and cache preparation commands are sufficient for building. Run the deployment commands only for an APK built without bundled weights. If using ADB with multiple devices, select the target with `ANDROID_SERIAL`.
 
 ### Qwen3-ASR NPU
 
@@ -58,7 +60,7 @@ python3 tools/model-validation/prepare_cache.py sensevoice-qnn-sm8850
 bash tools/deploy-models.sh qnn-sm8850
 ```
 
-For the NPU release configuration, run `./gradlew :app:assembleRelease -PincludeQnn=true -PincludeQwenHtp=true -PincludeSpeakerWorker=false -PincludeSpeakerNpu=true` and use your own Android signing key. Put the exact SDK files `LICENSE.pdf`, `NOTICE.txt` and `QNN_NOTICE.txt` in `~/.cache/codex/dependencies/qairt/2.40.0/notices/`. The build verifies them against the runtime lock and includes them in the NPU APK. The same files are required for QNN development builds.
+For the NPU release configuration, run `./gradlew :app:assembleRelease -PincludeQnn=true -PincludeQwenHtp=true -PincludeSpeakerWorker=false -PincludeSpeakerNpu=true -PincludeAsrWeights=true` and use your own Android signing key. The build reads verified weights from the shared model cache and bundles the upstream model licenses and notices under `assets/licenses/asr-models/`. Put the exact SDK files `LICENSE.pdf`, `NOTICE.txt` and `QNN_NOTICE.txt` in `~/.cache/codex/dependencies/qairt/2.40.0/notices/`. The build verifies them against the runtime lock and includes them in the NPU APK. The same files are required for QNN development builds.
 
 Prepare the [speaker worker](../tools/diarization-worker/README.md) and extract the original QNN 2.50 notices at the root of its SDK directory. The build verifies and includes the notices. The [Qwen worker build](../tools/qwen-npu-worker/README.md) also requires Android NDK 28.2.13676358.
 

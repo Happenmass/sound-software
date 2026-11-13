@@ -31,6 +31,8 @@
   <string name="asr_qwen_htp_description">"本地快转 · 中英混合"</string>
   <string name="qwen_htp_not_bundled">"此版本未包含 Qwen3-ASR NPU 运行库。"</string>
   <string name="qwen_htp_device">"此模型需要 SM8850、ARM64 和 4 KB 内存页。"</string>
+  <string name="asr_model_storage_low">"存储空间不足，腾出空间后可重试准备内置转写模型。"</string>
+  <string name="asr_model_unpack_failed">"无法准备内置转写模型，请重试。"</string>
   <string name="qwen_htp_models">"请先安装 Qwen3-ASR NPU 模型文件。"</string>
   <string name="qwen_htp_failed">"Qwen3-ASR NPU 未能完成此片段，可重试或改选其他转写服务。"</string>
   <string name="no_local_npu_models">"此设备没有可用的本地 NPU 转写模型"</string>

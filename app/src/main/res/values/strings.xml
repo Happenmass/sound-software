@@ -31,6 +31,8 @@
   <string name="asr_qwen_htp_description">"On-device · Mixed Chinese and English"</string>
   <string name="qwen_htp_not_bundled">"This build does not include the Qwen3-ASR NPU runtime."</string>
   <string name="qwen_htp_device">"This model requires an ARM64 SM8850 device with 4 KB memory pages."</string>
+  <string name="asr_model_storage_low">"Free up storage to prepare the built-in transcription model, then retry."</string>
+  <string name="asr_model_unpack_failed">"Could not prepare the built-in transcription model. Please retry."</string>
   <string name="qwen_htp_models">"Install the Qwen3-ASR NPU model files to use this option."</string>
   <string name="qwen_htp_failed">"Qwen3-ASR NPU could not finish this segment. Retry or select another transcription service."</string>
   <string name="no_local_npu_models">"No compatible on-device NPU transcription models"</string>

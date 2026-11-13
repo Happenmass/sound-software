@@ -29,6 +29,35 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class QwenHtpPhoneTest {
+    @Test fun bundledModelsDecodeWithoutExternallyInstalledWeights() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("runBundledAsr") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val app = context.applicationContext as SoundApplication
+        val modelRoot = File(context.cacheDir, "bundled-model-test-" + SystemClock.elapsedRealtimeNanos())
+        val fixture = PcmWav.open(File(app.getExternalFilesDir(null), "validation/qwen-htp/mixed.wav"))
+        val samples = fixture.readMono(0, fixture.sampleCount.toInt())
+        val qwen = QwenHtpFiles(app, modelRoot)
+        val senseVoice = QnnFiles.from(app, modelRoot)
+        assertTrue(dev.soundsoftware.app.BuildConfig.ASR_WEIGHTS_BUNDLED)
+        assertEquals(null, qwen.unavailable())
+        assertEquals(null, senseVoice.unavailable(QnnFiles.device()))
+        assertTrue(!modelRoot.exists())
+        QwenHtpRuntime(qwen, File(modelRoot, "qwen-windows")).use { runtime ->
+            runtime.prepare()
+            assertTrue(qwen.modelDir.canonicalPath.startsWith(app.noBackupFilesDir.canonicalPath + "/"))
+            assertTrue(runtime.decode(samples, 16000).text.lowercase().contains("play basketball"))
+            assertEquals("qnn-htp", runtime.backend)
+        }
+        QnnProcessRuntime(senseVoice, File(modelRoot, "sense-windows")).use { runtime ->
+            runtime.prepare()
+            assertTrue(senseVoice.model.canonicalPath.startsWith(app.noBackupFilesDir.canonicalPath + "/"))
+            assertTrue(runtime.decode(samples, 16000).text.isNotBlank())
+            assertEquals("qnn-htp", runtime.backend)
+        }
+        modelRoot.deleteRecursively()
+        Unit
+    }
+
     @Test fun appUidDecodesMixedSpeechAndFullRecording() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("runQwenHtp") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext
