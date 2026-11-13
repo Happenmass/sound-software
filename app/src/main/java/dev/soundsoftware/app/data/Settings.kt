@@ -49,7 +49,11 @@ class SettingsStore(private val context: Context) {
     val state = mutable.asStateFlow()
     val secrets = SecretStore(context)
 
-    private fun load(): AppSettings = prefs.getString("settings", null)?.let { runCatching { json.decodeFromString<AppSettings>(it) }.getOrNull() } ?: AppSettings()
+    private fun load(): AppSettings {
+        val saved = prefs.getString("settings", null)?.let { runCatching { json.decodeFromString<AppSettings>(it) }.getOrNull() }
+            ?: return AppSettings()
+        return saved.copy(defaults = saved.defaults.withCurrentAsrProfile())
+    }
 
     fun update(transform: (AppSettings) -> AppSettings) {
         mutable.update(transform)

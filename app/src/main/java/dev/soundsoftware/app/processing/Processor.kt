@@ -1,12 +1,11 @@
 package dev.soundsoftware.app.processing
 
 import dev.soundsoftware.app.R
+import dev.soundsoftware.app.inference.QwenHtpFiles
+import dev.soundsoftware.app.inference.QwenHtpRuntime
 import dev.soundsoftware.app.data.RecordingRepository
 import dev.soundsoftware.app.data.SettingsStore
-import dev.soundsoftware.app.inference.SherpaAsrRuntime
 import dev.soundsoftware.app.inference.SherpaDiarizer
-import dev.soundsoftware.app.inference.SherpaModel
-import dev.soundsoftware.app.inference.SherpaRuntimeConfig
 import dev.soundsoftware.core.analysis.LlmConfig
 import dev.soundsoftware.core.analysis.MeetingAnalyzer
 import dev.soundsoftware.core.analysis.FileAnalysisCheckpoints
@@ -40,8 +39,7 @@ private class TurnWindows(private val ranges: List<SpeechRange>, revision: Int) 
 data class AsrProfile(val id: String, val titleRes: Int, val subtitleRes: Int, val local: Boolean)
 
 val ASR_PROFILES = listOf(
-    AsrProfile("qwen-cpu", R.string.asr_qwen, R.string.asr_qwen_description, true),
-    AsrProfile("sensevoice-cpu", R.string.asr_sensevoice, R.string.asr_sensevoice_description, true),
+    AsrProfile("qwen-htp", R.string.asr_qwen_htp, R.string.asr_qwen_htp_description, true),
     AsrProfile("sensevoice-qnn", R.string.asr_npu, R.string.asr_npu_description, true),
     AsrProfile("http-api", R.string.asr_http, R.string.asr_http_description, false),
 )
@@ -59,6 +57,7 @@ class Processor(
     private val qnnFiles: dev.soundsoftware.app.inference.QnnFiles? = null,
     val diarizer: dev.soundsoftware.app.inference.SpeakerAnalyzer = SherpaDiarizer(File(modelDir, "diarization")),
     private val analysisClient: OkHttpClient = OkHttpClient(),
+    private val qwenHtpFiles: QwenHtpFiles? = null,
     private val notify: (Recording) -> Unit,
 ) {
     private data class QueuedRecording(val id: String, val generation: Long)
@@ -98,11 +97,23 @@ class Processor(
         return files.unavailable(dev.soundsoftware.app.inference.QnnFiles.device())
     }
 
+    fun qwenHtpUnavailableReason(): String? =
+        if (qwenHtpFiles == null) settings.text(R.string.qwen_htp_not_bundled) else qwenHtpFiles.unavailable()
+
+    fun localAsrProfiles(): List<AsrProfile> {
+        val device = dev.soundsoftware.app.inference.QnnFiles.device()
+        return ASR_PROFILES.filter {
+            when (it.id) {
+                "qwen-htp" -> qwenHtpFiles?.supported(device) == true
+                "sensevoice-qnn" -> qnnFiles?.supported(device) == true
+                else -> false
+            }
+        }
+    }
+
     fun modelReady(profileId: String): Boolean = when (profileId) {
-        "qwen-cpu" -> listOf("encoder.int8.onnx", "decoder.int8.onnx", "conv_frontend.onnx", "tokenizer/vocab.json", "tokenizer/merges.txt")
-            .all { File(modelDir, "qwen/$it").length() > 0 }
-        "sensevoice-cpu" -> File(modelDir, "sensevoice/model.int8.onnx").length() > 0 && File(modelDir, "sensevoice/tokens.txt").length() > 0
         "sensevoice-qnn" -> qnnUnavailableReason() == null
+        "qwen-htp" -> qwenHtpUnavailableReason() == null
         "http-api" -> settings.state.value.remoteAsr.let { it.endpoint.isNotBlank() && it.model.isNotBlank() } && settings.secrets.has(KEY_ASR)
         else -> false
     }
@@ -111,7 +122,7 @@ class Processor(
 
     /** Rough planning estimate shown before starting; not a measured benchmark. */
     fun estimateMs(durationMs: Long, options: TranscribeOptions): Long {
-        val rtf = when (options.profileId) { "qwen-cpu" -> 0.35; "sensevoice-cpu" -> 0.1; else -> 0.15 }
+        val rtf = 0.15
         val diarize = if (diarizer.isReady) 0.08 else 0.0
         val summary = if (options.template != SceneTemplate.TRANSCRIPT_ONLY && llmReady()) 30_000 else 0
         return (durationMs * (rtf + diarize)).toLong() + summary + 5_000
@@ -124,7 +135,7 @@ class Processor(
         manualSummaryJobs[id]?.cancelAndJoin()
         if (id in discardedAnalysisIds) return
         summaryRequests.remove(id)
-        repository.update(id) { it.copy(stage = ProcessingStage.QUEUED, options = options, progress = null, stageText = settings.text(R.string.queued), error = null) }
+        repository.update(id) { it.copy(stage = ProcessingStage.QUEUED, options = options.withCurrentAsrProfile(), progress = null, stageText = settings.text(R.string.queued), error = null) }
         if (id !in discardedAnalysisIds && generation == (generations[id] ?: 0L))
             queue.send(QueuedRecording(id, generation))
     }
@@ -143,10 +154,10 @@ class Processor(
 
     private suspend fun process(id: String) {
         val recording = repository.get(id) ?: return
-        val options = recording.options ?: settings.state.value.defaults
+        val options = (recording.options ?: settings.state.value.defaults).withCurrentAsrProfile()
         try {
             if (!modelReady(options.profileId)) throw AsrException(ErrorCode.MODEL_NOT_READY,
-                when(options.profileId) {"http-api" -> settings.text(R.string.cloud_asr_not_configured);"sensevoice-qnn" -> qnnUnavailableReason() ?: settings.text(R.string.unavailable);else -> settings.text(R.string.local_asr_models_missing)})
+                when(options.profileId) {"http-api" -> settings.text(R.string.cloud_asr_not_configured);"sensevoice-qnn" -> qnnUnavailableReason() ?: settings.text(R.string.unavailable);"qwen-htp" -> qwenHtpUnavailableReason() ?: settings.text(R.string.unavailable);else -> settings.text(R.string.local_asr_models_missing)})
             val wav = withContext(Dispatchers.IO) { PcmWav.open(repository.audioFile(id)) }
             repository.update(id) { it.copy(stage = ProcessingStage.TRANSCRIBING, stageText = settings.text(R.string.preparing), error = null) }
             val warnings = mutableListOf<String>()
@@ -195,21 +206,19 @@ class Processor(
                 val remote = settings.state.value.remoteAsr
                 HttpFileAsrAdapter(HttpAsrConfig(remote.endpoint.toHttpUrl(), remote.model, supportsSegmentTimestamps = remote.segmentTimestamps), { settings.secrets.get(KEY_ASR) })
             }
+            "qwen-htp" -> {
+                val files = qwenHtpFiles ?: throw AsrException(ErrorCode.BACKEND_UNAVAILABLE, settings.text(R.string.qwen_htp_not_bundled))
+                val runtime = QwenHtpRuntime(files, File(checkpointDir, "qwen-htp-windows"))
+                val vad = turns?.let { TurnWindows(it.toSpeechRanges(16000, wav.sampleCount), it.hashCode()) } ?: WholeRecordingVad()
+                LocalAsrAdapter(runtime, vad)
+            }
             "sensevoice-qnn" -> {
                 val files=qnnFiles ?: throw AsrException(ErrorCode.BACKEND_UNAVAILABLE,settings.text(R.string.qnn_not_configured))
                 val runtime=dev.soundsoftware.app.inference.QnnProcessRuntime(files,File(checkpointDir,"qnn-windows"),language=options.effectiveLanguage)
                 val vad=turns?.let {TurnWindows(it.toSpeechRanges(16000,wav.sampleCount),it.hashCode())} ?: WholeRecordingVad()
                 LocalAsrAdapter(runtime,vad)
             }
-            else -> {
-                check(options.profileId in listOf("qwen-cpu","sensevoice-cpu")) { settings.text(R.string.unknown_asr) }
-                val qwen = options.profileId == "qwen-cpu"
-                val runtime = SherpaAsrRuntime(SherpaRuntimeConfig(File(modelDir, if (qwen) "qwen" else "sensevoice"),
-                    if (qwen) SherpaModel.QWEN3_ASR else SherpaModel.SENSE_VOICE, if (qwen) "2026-03-25-int8" else "2024-07-17-int8",
-                    language = if (qwen) null else options.effectiveLanguage, hotwords = if (qwen) options.hotwords else emptyList()))
-                val vad = turns?.let { TurnWindows(it.toSpeechRanges(16000, wav.sampleCount), it.hashCode()) } ?: WholeRecordingVad()
-                LocalAsrAdapter(runtime, vad)
-            }
+            else -> throw AsrException(ErrorCode.BACKEND_UNAVAILABLE, settings.text(R.string.unknown_asr))
         }
         try {
             val revision = listOf(options.profileId, options.effectiveLanguage, options.hotwords.joinToString(","), settings.state.value.remoteAsr.model, "v2").joinToString("|")

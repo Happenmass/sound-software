@@ -10,19 +10,29 @@ import dev.soundsoftware.core.audio.PcmWav
 import java.io.File
 import kotlinx.coroutines.*
 
-data class QnnDevice(val soc:String,val arm64:Boolean,val emulator:Boolean,val pageSize:Long)
+data class QnnDevice(val soc:String,val arm64:Boolean,val emulator:Boolean,val pageSize:Long) {
+    val supportsSm8850Htp: Boolean
+        get() = arm64 && !emulator && soc.startsWith("SM8850", ignoreCase = true) && pageSize == 4096L
+}
 data class QnnFiles(val nativeDir:File,val modelDir:File) {
     val executable get()=File(nativeDir,"libsound_qnn_runner.so")
     val model get()=File(modelDir,"model.bin")
     val tokens get()=File(modelDir,"tokens.txt")
+    private val runtimeLibraries get() = listOf(
+        "libQnnHtp.so", "libQnnSystem.so", "libQnnHtpPrepare.so", "libQnnHtpV81Stub.so", "libQnnHtpV81Skel.so",
+    ).all { File(nativeDir, it).isFile }
+
+    fun supported(device: QnnDevice): Boolean =
+        BuildConfig.QNN_ENABLED && device.supportsSm8850Htp && executable.canExecute() && runtimeLibraries
+
     fun unavailable(device:QnnDevice):String? = when {
         !BuildConfig.QNN_ENABLED -> "此安装包未包含QNN运行组件"
         device.emulator -> "模拟器没有高通 NPU，无法使用此加速方式"
-        !device.arm64 || !device.soc.uppercase().startsWith("SM8850") -> "当前QNN模型仅匹配SM8850，检测到${device.soc.ifBlank{"未知芯片"}}"
+        !device.arm64 || !device.soc.startsWith("SM8850", ignoreCase = true) -> "当前QNN模型仅匹配SM8850，检测到${device.soc.ifBlank{"未知芯片"}}"
         device.pageSize!=4096L -> "当前QNN组合仅验证4KB内存页设备"
         !executable.canExecute() -> "QNN子进程组件未安装"
-        listOf("libQnnHtp.so","libQnnSystem.so","libQnnHtpPrepare.so","libQnnHtpV81Stub.so","libQnnHtpV81Skel.so").any{!File(nativeDir,it).isFile} -> "QNN运行库不完整"
-        model.length()==0L || tokens.length()==0L -> "请部署SM8850专用10秒SenseVoice QNN模型"
+        !runtimeLibraries -> "QNN运行库不完整"
+        listOf(model, tokens).any { !it.isFile || !it.canRead() || it.length() == 0L } -> "请部署SM8850专用10秒SenseVoice QNN模型"
         else -> null
     }
     companion object {

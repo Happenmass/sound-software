@@ -24,6 +24,15 @@ class QnnProcessRuntimeTest {
         try{run(QnnFiles(lib,model),dir)}finally{dir.deleteRecursively()}
     }
     private val device=QnnDevice("SM8850",true,false,4096)
+    @Test fun sm8850ModelCompatibilityUsesDetectedHardware() {
+        assertTrue(device.supportsSm8850Htp)
+        assertTrue(device.copy(soc = "sm8850").supportsSm8850Htp)
+        assertFalse(device.copy(soc = "SM8650").supportsSm8850Htp)
+        assertFalse(device.copy(arm64 = false).supportsSm8850Htp)
+        assertFalse(device.copy(emulator = true).supportsSm8850Htp)
+        assertFalse(device.copy(pageSize = 16384).supportsSm8850Htp)
+    }
+
     @Test fun emulatorIsRejectedBeforeAnyNpuLaunch()=runBlocking {
         val files=QnnFiles.from(context,File(context.getExternalFilesDir(null),"models"))
         val emulator=QnnFiles.device().copy(emulator=true)

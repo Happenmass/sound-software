@@ -35,15 +35,15 @@ class PerformanceBenchmarkTest {
         val models = File(context.getExternalFilesDir(null), "models")
         val fixture = File(root, args.getString("fixture") ?: "dialog.wav")
         require(fixture.isFile) { "Performance fixture missing" }
-        val profile = args.getString("profile") ?: "qwen-cpu"
-        require(profile in listOf("qwen-cpu", "sensevoice-cpu"))
         val mode = args.getString("mode") ?: "pipeline"
         require(mode in listOf("micro", "pipeline"))
+        val profile = args.getString("profile") ?: if (mode == "micro") "qwen-cpu" else "qwen-htp"
+        require(profile in if (mode == "micro") listOf("qwen-cpu", "sensevoice-cpu") else listOf("qwen-htp", "sensevoice-qnn"))
         val repetitions = (args.getString("repetitions") ?: "3").toInt().also { require(it in 1..5) }
         val result = JSONObject().put("profile", profile).put("mode", mode)
             .put("fixture", fixture.name).put("inputSha256", fixture.sha256())
             .put("durationMs", PcmWav.open(fixture).durationMs)
-            .put("build", "debug").put("backend", "cpu").put("samples", JSONArray())
+            .put("build", "debug").put("backend", if (mode == "micro") "cpu" else "qnn-htp").put("samples", JSONArray())
         val report = File(root, "$profile-$mode-${fixture.nameWithoutExtension}.json")
         fun save() { report.writeText(result.toString(2)) }
         suspend fun measured(name: String, block: suspend (JSONObject) -> Unit) {
@@ -96,7 +96,7 @@ class PerformanceBenchmarkTest {
             val workspace = File(context.cacheDir, "performance-${System.nanoTime()}").apply { mkdirs() }
             val repository = RecordingRepository(workspace)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val processor = Processor(repository, SettingsStore(context), models, File(workspace, "checkpoints"), scope, notify = {})
+            val processor = Processor(repository, SettingsStore(context), models, File(workspace, "checkpoints"), scope, qnnFiles = QnnFiles.from(context, models), qwenHtpFiles = QwenHtpFiles(context, models), notify = {})
             try {
                 require(processor.modelReady(profile) && processor.diarizer.isReady) { "ASR/diarization models missing" }
                 val id = "benchmark-$index"

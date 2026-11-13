@@ -49,14 +49,14 @@ class DiarizationRegressionTest {
         try {
             val repo=dev.soundsoftware.app.data.RecordingRepository(root)
             val settings=dev.soundsoftware.app.data.SettingsStore(context)
-            val processor=dev.soundsoftware.app.processing.Processor(repo,settings,app.modelDir,File(root,"checkpoints"),scope){}
+            val processor=dev.soundsoftware.app.processing.Processor(repo,settings,app.modelDir,File(root,"checkpoints"),scope,qwenHtpFiles=QwenHtpFiles(base,app.modelDir)){}
             val input=File(base.getExternalFilesDir("validation"),"diarization-user-sample.wav")
             val wav=PcmWav.open(input);input.copyTo(repo.audioFile("authorized-sample"))
             repo.add(dev.soundsoftware.core.model.Recording("authorized-sample",0,wav.durationMs))
             val start=android.os.SystemClock.elapsedRealtime()
             // Match SoundApplication: initialize the consumer on Main before an enqueue can race startup scanning.
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) { processor.start() }
-            processor.enqueue("authorized-sample",dev.soundsoftware.core.model.TranscribeOptions(template=dev.soundsoftware.core.model.SceneTemplate.TRANSCRIPT_ONLY,profileId="sensevoice-cpu",speakerCount=null))
+            processor.enqueue("authorized-sample",dev.soundsoftware.core.model.TranscribeOptions(template=dev.soundsoftware.core.model.SceneTemplate.TRANSCRIPT_ONLY,profileId="qwen-htp",speakerCount=null))
             val done=kotlinx.coroutines.withTimeout(600_000) {
                 repo.recordings.first {items->items.any {it.stage in listOf(dev.soundsoftware.core.model.ProcessingStage.DONE,dev.soundsoftware.core.model.ProcessingStage.FAILED)}}.single()
             }
@@ -65,7 +65,7 @@ class DiarizationRegressionTest {
             val reopened=dev.soundsoftware.app.data.RecordingRepository(root).also{it.load()}.get("authorized-sample")!!
             val report=buildJsonObject {
                 put("persistedSpeakers",reopened.speakers.size)
-                put("stage",done.stage.name);put("automatic",true);put("profile","sensevoice-cpu");put("remoteConfigured",false)
+                put("stage",done.stage.name);put("automatic",true);put("profile","qwen-htp");put("remoteConfigured",false)
                 put("durationMs",wav.durationMs);put("elapsedMs",android.os.SystemClock.elapsedRealtime()-start)
                 put("speakers",done.speakers.size);put("segments",done.transcript?.segments?.size ?: 0)
                 put("unattributedSegments",done.transcript?.segments?.count{it.speakerId==null} ?: 0)

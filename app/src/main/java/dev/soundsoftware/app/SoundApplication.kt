@@ -53,15 +53,18 @@ class SoundApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         // App-owned model folders, so files later pushed by adb or a model installer stay readable.
-        listOf("qwen", "sensevoice", "diarization").forEach { File(modelDir, it).mkdirs() }
+        File(modelDir, "diarization").mkdirs()
         settings = SettingsStore(this)
         recordingIndex = dev.soundsoftware.app.agent.RecordingIndex(File(filesDir, "recordings.db"))
         repository = RecordingRepository(filesDir, recordingIndex)
         assistant = dev.soundsoftware.app.agent.AgentController(recordingIndex, settings, scope)
         playback = Playback(scope)
-        processor = Processor(repository, settings, modelDir, File(filesDir, "checkpoints"), scope, qnnFiles=dev.soundsoftware.app.inference.QnnFiles.from(this,modelDir), diarizer=dev.soundsoftware.app.inference.SherpaDiarizer.forDevice(this,File(modelDir,"diarization")), notify = ::notifyDone)
+        processor = Processor(repository, settings, modelDir, File(filesDir, "checkpoints"), scope, qnnFiles=dev.soundsoftware.app.inference.QnnFiles.from(this,modelDir), diarizer=dev.soundsoftware.app.inference.SherpaDiarizer.forDevice(this,File(modelDir,"diarization")), qwenHtpFiles = dev.soundsoftware.app.inference.QwenHtpFiles(this, modelDir), notify = ::notifyDone)
         devices = DeviceManager(DeviceLinkFactory.create(this), settings, repository, scope) { id ->
-            if (settings.state.value.autoTranscribe) scope.launch { processor.enqueue(id, settings.state.value.defaults) }
+            val prefs = settings.state.value
+            if (prefs.autoTranscribe && processor.modelReady(prefs.defaults.profileId)) {
+                scope.launch { processor.enqueue(id, prefs.defaults) }
+            }
         }
         autoSyncRequested = combine(settings.state, bluetoothAllowed) { prefs, allowed ->
             allowed && prefs.autoSync && prefs.boundDevice != null

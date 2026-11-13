@@ -49,7 +49,7 @@ data class Recording(
 @Serializable
 data class TranscribeOptions(
     val template: SceneTemplate = SceneTemplate.MEETING,
-    val profileId: String = "qwen-cpu",
+    val profileId: String = "qwen-htp",
     /** null = automatic language detection. */
     val language: String? = "zh",
     val mixedChineseEnglish: Boolean = true,
@@ -57,6 +57,13 @@ data class TranscribeOptions(
     val hotwords: List<String> = emptyList(),
 ) {
     init { require(speakerCount == null || speakerCount in 1..12) }
+    /** Translate saved CPU selections when a recording is transcribed again. */
+    fun withCurrentAsrProfile(): TranscribeOptions = when (profileId) {
+        "qwen-cpu" -> copy(profileId = "qwen-htp")
+        "sensevoice-cpu" -> copy(profileId = "sensevoice-qnn")
+        else -> this
+    }
+
     /** Language hint actually given to the recognizer; mixed mode lets the model detect per window. */
     val effectiveLanguage: String? get() = if (mixedChineseEnglish) null else language
 }

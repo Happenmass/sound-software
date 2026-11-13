@@ -1,0 +1,19 @@
+{
+  "runtime": {
+    "onnxruntime.aar": ["https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.29.0/onnxruntime-android-1.29.0.aar", "e97540ca78fe36f6fe2013f82843414fb843b6c7681fb04644cba5e1406662dd"],
+    "onnxruntime-qnn.aar": ["https://repo.maven.apache.org/maven2/com/qualcomm/qti/onnxruntime-android-qnn/2.7.0/onnxruntime-android-qnn-2.7.0.aar", "ecd36df222e2a947ceb13bdd6fec181d1f1841b40379e21ce519830f2fbd562a"],
+    "qnn-runtime.aar": ["https://repo.maven.apache.org/maven2/com/qualcomm/qti/qnn-runtime/2.51.0/qnn-runtime-2.51.0.aar", "6388face1d5aa5e8958d745e5a547e92b5bec6fc332dfb1b438b1e17ffa02861"],
+    "kissfft.zip": ["https://codeload.github.com/mborgerding/kissfft/zip/febd4caeed32e33ad8b2e0bb5ea77542c40f18ec", "497103e664168ebe39580b757adbe616f6cf85a16572af581ca7bc42d0ab13fd"],
+    "onnxruntime-LICENSE": ["https://raw.githubusercontent.com/microsoft/onnxruntime/v1.29.0/LICENSE", "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"],
+    "onnxruntime-ThirdPartyNotices.txt": ["https://raw.githubusercontent.com/microsoft/onnxruntime/v1.29.0/ThirdPartyNotices.txt", "53d3fa5821ac016ac24dd35775c996efec86e2ae0841e9a3a5e146c0ae916845"],
+    "onnxruntime-qnn-LICENSE": ["https://raw.githubusercontent.com/onnxruntime/onnxruntime-qnn/v2.7.0/LICENSE", "f11e754f932564a0d8a9ad2c233bf671253dde137d3e2ef3082448bbe83e1764"],
+    "onnxruntime-qnn-ThirdPartyNotices.txt": ["https://raw.githubusercontent.com/onnxruntime/onnxruntime-qnn/v2.7.0/ThirdPartyNotices.txt", "d039f057d20690116daa1fc65165cd0221ee168208d770062a84c1b4d579abb1"]
+  },
+  "models": {
+    "qasr_enc.sm8850.ctx.onnx": [234574674, "a414a62d3b2ced4db81a1a6cdbb182249689dc1a1edc326d41f1cb36fbc078d7"],
+    "qasr_ar64.sm8850.ctx.onnx": [3729, "abcced0779aa8938f87a959630ed0670d65e0fa9c36b9562c6bdba40782434f6"],
+    "qasr_ar1.sm8850.ctx.onnx": [3727, "4396c7dcb6ce2510f0fa4f511a1ed5f576f52b20d9f0a308cec5a9da7eb1e7fe"],
+    "qasr_ar64.sm8850.ctx_qnn.bin": [570302464, "a34d71d320e89639bce54e4a15cef5e9eb10bb975627c8bc34f7c9c6e51b192c"],
+    "qasr_assets.bin": [90964736, "412c19c94232ad166e1c9ea8e2fd1aa85671dee14ddf1489bc10a8c5d871670d"]
+  }
+}

@@ -7,6 +7,15 @@ plugins {
 val includeQnn = providers.gradleProperty("includeQnn").getOrElse("false").toBoolean()
 val includeSpeakerWorker = providers.gradleProperty("includeSpeakerWorker").getOrElse(includeQnn.toString()).toBoolean()
 val includeSpeakerNpu = providers.gradleProperty("includeSpeakerNpu").getOrElse((includeQnn && includeSpeakerWorker).toString()).toBoolean()
+val includeQwenHtp = providers.gradleProperty("includeQwenHtp").getOrElse("false").toBoolean()
+val prepareQwenHtp by tasks.registering(Exec::class) {
+    val worker = rootProject.file("tools/qwen-npu-worker")
+    val jni = layout.buildDirectory.dir("generated/qwenHtpJni")
+    val assets = layout.buildDirectory.dir("generated/qwenHtpAssets")
+    inputs.files(worker.listFiles()?.filter { it.extension in setOf("cc", "h", "json", "py") }.orEmpty())
+    outputs.dirs(jni, assets)
+    commandLine("python3", worker.resolve("build.py"), "--jni", jni.get().asFile, "--assets", assets.get().asFile)
+}
 val prepareSpeakerNpu by tasks.registering(Exec::class) {
     inputs.files(rootProject.file("tools/prepare-speaker-npu-runtime.py"),rootProject.file("tools/speaker-npu-runtime-lock.json"))
     inputs.files(rootProject.fileTree("tools/diarization-worker") { include("*.cc","*.h","*.py") })
@@ -51,8 +60,9 @@ android {
         buildConfigField("boolean", "QNN_ENABLED", includeQnn.toString())
         buildConfigField("boolean", "SPEAKER_WORKER_ENABLED", includeSpeakerWorker.toString())
         buildConfigField("boolean", "SPEAKER_NPU_ENABLED", includeSpeakerNpu.toString())
-        versionCode = 3
-        versionName = "0.1.2"
+        buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
+        versionCode = 6
+        versionName = "0.1.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
@@ -74,7 +84,11 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
-        jniLibs.keepDebugSymbols += setOf("**/libsound_qnn_runner.so", "**/libsound_speaker_npu_worker.so", "**/libQnn*.so")
+        jniLibs.keepDebugSymbols += setOf("**/libsound_qnn_runner.so", "**/libsound_qwen_htp_worker.so", "**/libsound_speaker_npu_worker.so", "**/libQnn*.so")
+    }
+    if (includeQwenHtp) {
+        sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qwenHtpJni"))
+        sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenHtpAssets"))
     }
     if (includeQnn) sourceSets.getByName("androidTest").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerProbeJni"))
     if (includeSpeakerWorker) sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerJni"))
@@ -119,3 +133,5 @@ if (includeSpeakerWorker) tasks.named("preBuild").configure { dependsOn(prepareS
 if (includeQnn) tasks.matching { it.name == "mergeDebugAndroidTestJniLibFolders" }.configureEach { dependsOn(prepareSpeakerProbe) }
 
 if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu, prepareSpeakerNpuNotices) }
+
+if (includeQwenHtp) tasks.named("preBuild").configure { dependsOn(prepareQwenHtp) }

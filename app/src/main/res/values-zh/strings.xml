@@ -25,12 +25,16 @@
   <string name="asr_http">"云端 API"</string>
   <string name="asr_http_description">"上传音频到你配置的转写服务"</string>
   <string name="asr_https_required">"转写服务地址必须使用 HTTPS"</string>
-  <string name="asr_npu">"SenseVoice · 高通 NPU"</string>
+  <string name="asr_npu">"SenseVoice NPU"</string>
   <string name="asr_npu_description">"本地 NPU · 支持 SM8850 · 需匹配模型"</string>
-  <string name="asr_qwen">"Qwen3-ASR · 本地"</string>
-  <string name="asr_qwen_description">"质量优先 · 中英混合 · 支持热词"</string>
-  <string name="asr_sensevoice">"SenseVoice · 本地"</string>
-  <string name="asr_sensevoice_description">"速度优先 · 可指定语言"</string>
+  <string name="asr_qwen_htp">"Qwen3-ASR NPU"</string>
+  <string name="asr_qwen_htp_description">"本地快转 · 中英混合"</string>
+  <string name="qwen_htp_not_bundled">"此版本未包含 Qwen3-ASR NPU 运行库。"</string>
+  <string name="qwen_htp_device">"此模型需要 SM8850、ARM64 和 4 KB 内存页。"</string>
+  <string name="qwen_htp_models">"请先安装 Qwen3-ASR NPU 模型文件。"</string>
+  <string name="qwen_htp_failed">"Qwen3-ASR NPU 未能完成此片段，可重试或改选其他转写服务。"</string>
+  <string name="no_local_npu_models">"此设备没有可用的本地 NPU 转写模型"</string>
+  <string name="qwen_htp_hotwords_help">"Qwen3-ASR NPU 仅在生成纪要时使用这些术语。"</string>
   <string name="assistant_config_required">"请先配置纪要服务，模型需要支持工具调用"</string>
   <string name="assistant_failed">"录音助手查询失败，请重试"</string>
   <string name="assistant_intro">"助手会先查目录和原文，再给出带来源的回答。可以指定日期、人名，也可以比较不同会议。"</string>
@@ -240,8 +244,6 @@
   <string name="llm_https_required">"纪要服务地址必须使用 HTTPS"</string>
   <string name="loading_device_recordings">"正在读取设备录音…"</string>
   <string name="local_asr_models_missing">"本地语音模型未安装"</string>
-  <string name="local_cpu_transcription">"本地转写 · CPU"</string>
-  <string name="local_model_setup_hint">"模型目录见「我的 › 本地模型」。"</string>
   <string name="local_models">"本地模型"</string>
   <string name="local_recordings_count">"%1$s 条录音 · 全部保存在这台手机"</string>
   <string name="manage_recordings">"管理设备上的 %1$s 条录音 ›"</string>
@@ -251,7 +253,6 @@
   <string name="mixed_chinese_english">"中英混合识别"</string>
   <string name="model">"模型"</string>
   <string name="model_attribution">"由 %1$s 根据逐字稿生成，可能有误，请以录音为准。"</string>
-  <string name="model_directory">"模型目录：%1$s"</string>
   <string name="models_not_installed_suffix">" · 模型未安装"</string>
   <string name="more">"更多"</string>
   <string name="move_recorder_closer">"请让录音豆靠近手机后重试"</string>
@@ -362,7 +363,6 @@
   <string name="retry_settings">"调整设置后重试"</string>
   <string name="rewind_15">"后退 15 秒"</string>
   <string name="risks">"风险"</string>
-  <string name="runtime_ready">"组件就绪"</string>
   <string name="save">"保存"</string>
   <string name="save_audio_to_files">"音频存到「文件」"</string>
   <string name="save_document_to_files">"文档存到「文件」"</string>

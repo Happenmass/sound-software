@@ -80,13 +80,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun showSync() { stack.value = listOf(Screen.Main, Screen.Sync()) }
 
     fun title(r: Recording) = app.displayTitle(r)
+    fun qwenHtpUnavailableReason() = app.processor.qwenHtpUnavailableReason()
     fun qnnUnavailableReason() = app.processor.qnnUnavailableReason()
+    fun localAsrProfiles() = app.processor.localAsrProfiles()
     fun modelReady(profileId: String) = app.processor.modelReady(profileId)
     fun llmReady() = app.processor.llmReady()
     fun diarizationReady() = app.processor.diarizer.isReady
     fun estimateMs(r: Recording?, options: TranscribeOptions) = app.processor.estimateMs(r?.durationMs ?: 0, options)
     fun newRecordings() = app.devices.newRecordings(device.value, recordings.value)
-    val modelDir: File get() = app.modelDir
 
     // ---- Device ----
     fun permissionsGranted(granted: Boolean) = app.setBluetoothAllowed(granted)
@@ -111,7 +112,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setDeleteAfterSync(value: Boolean) = app.settings.update { it.copy(deleteAfterSync = value) }
 
     // ---- Processing ----
-    fun saveDefaults(options: TranscribeOptions) = app.settings.update { it.copy(defaults = options) }
+    fun saveDefaults(options: TranscribeOptions) = app.settings.update { it.copy(defaults = options.withCurrentAsrProfile()) }
     fun startTranscription(id: String, options: TranscribeOptions) = viewModelScope.launch {
         app.settings.update { it.copy(defaults = options.copy(template = it.defaults.template)) }
         app.processor.enqueue(id, options)

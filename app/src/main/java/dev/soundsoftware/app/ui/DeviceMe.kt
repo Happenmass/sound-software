@@ -154,14 +154,16 @@ fun MeContent(vm: AppViewModel, onImport: () -> Unit) {
         Group {
             SettingRow(stringResource(R.string.notes_service), if (vm.llmReady()) settings.llm.model else stringResource(R.string.not_configured), subtitle = stringResource(R.string.notes_service_privacy), chevron = true, divider = false) { vm.push(Screen.LlmService) }
         }
+        val localModels = vm.localAsrProfiles()
         SectionLabel(stringResource(R.string.local_models))
         Group {
-            SettingRow("Qwen3-ASR 0.6B", if (vm.modelReady("qwen-cpu")) stringResource(R.string.installed) else stringResource(R.string.not_installed), subtitle = stringResource(R.string.local_cpu_transcription))
-            SettingRow("SenseVoice", if (vm.modelReady("sensevoice-cpu")) stringResource(R.string.installed) else stringResource(R.string.not_installed), subtitle = stringResource(R.string.local_cpu_transcription))
-            SettingRow(stringResource(R.string.speaker_diarization), if (vm.diarizationReady()) stringResource(R.string.installed) else stringResource(R.string.not_installed), subtitle = stringResource(R.string.speaker_models_description))
-            SettingRow(stringResource(R.string.qualcomm_npu), if(vm.modelReady("sensevoice-qnn")) stringResource(R.string.runtime_ready) else stringResource(R.string.unavailable), subtitle = vm.qnnUnavailableReason() ?: stringResource(R.string.sensevoice_npu_description), divider = false)
+            if (localModels.isEmpty()) {
+                SettingRow(stringResource(R.string.no_local_npu_models), divider = false)
+            } else localModels.forEachIndexed { index, model ->
+                val status = if (vm.modelReady(model.id)) R.string.installed else R.string.not_installed
+                SettingRow(stringResource(model.titleRes), stringResource(status), divider = index < localModels.lastIndex)
+            }
         }
-        T(stringResource(R.string.model_directory, vm.modelDir.absolutePath), ts(12, 400, C.Faint, lineHeight = 1.5f), Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp))
         SectionLabel(stringResource(R.string.recordings))
         Group {
             SettingRow(stringResource(R.string.import_audio), subtitle = stringResource(R.string.import_audio_formats), chevron = true, divider = false, onClick = onImport)

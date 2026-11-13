@@ -90,7 +90,7 @@ class QnnPhoneValidationTest {
     private suspend fun isolated(block:suspend(Processor,RecordingRepository)->Unit){
         val base=context;val prefix="qnn-phone-${UUID.randomUUID()}-";val wrapped=object:ContextWrapper(base){override fun getSharedPreferences(name:String,mode:Int)=base.getSharedPreferences(prefix+name,mode)}
         val directory=File(base.cacheDir,prefix).apply{mkdirs()};val scope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
-        try {val repo=RecordingRepository(directory);val processor=Processor(repo,SettingsStore(wrapped),app.modelDir,File(directory,"checkpoints"),scope,qnnFiles=QnnFiles.from(base,app.modelDir),diarizer=SherpaDiarizer.forDevice(base,File(app.modelDir,"diarization"))){}
+        try {val repo=RecordingRepository(directory);val processor=Processor(repo,SettingsStore(wrapped),app.modelDir,File(directory,"checkpoints"),scope,qnnFiles=QnnFiles.from(base,app.modelDir),diarizer=SherpaDiarizer.forDevice(base,File(app.modelDir,"diarization")), qwenHtpFiles=QwenHtpFiles(base,app.modelDir)){}
             block(processor,repo)
         }finally{scope.coroutineContext.job.cancelAndJoin();base.deleteSharedPreferences(prefix+"app-settings");directory.deleteRecursively()}
     }
@@ -99,7 +99,7 @@ class QnnPhoneValidationTest {
         val output=File(root,"pipeline-${input.nameWithoutExtension}.json")
         val repetitions=(args.getString("repetitions") ?: "1").toInt().also{require(it in 1..3)}
         repeat(repetitions){rep->
-        val profiles=if(rep%2==0)listOf("sensevoice-cpu","sensevoice-qnn") else listOf("sensevoice-qnn","sensevoice-cpu")
+        val profiles=if(rep%2==0)listOf("qwen-htp","sensevoice-qnn") else listOf("sensevoice-qnn","qwen-htp")
         for(profile in profiles)isolated{processor,repo->
             input.copyTo(repo.audioFile("test"));repo.add(Recording("test",0,wav.durationMs))
             withContext(Dispatchers.Main.immediate){processor.start()}
@@ -113,7 +113,7 @@ class QnnPhoneValidationTest {
                 row.put("totalMs",SystemClock.elapsedRealtime()-start).put("stage",done.stage.name).put("error",done.error).put("stages",stages)
                     .put("backend",done.transcript?.backend).put("speakers",done.speakers.size).put("segments",done.transcript?.segments?.size ?: 0)
                     .put("textCharacters",done.transcript?.segments?.sumOf{it.text.length} ?: 0)
-                assertEquals(done.error,ProcessingStage.DONE,done.stage);if(profile=="sensevoice-qnn")assertEquals("qnn-htp",done.transcript!!.backend)
+                assertEquals(done.error,ProcessingStage.DONE,done.stage);assertEquals("qnn-htp",done.transcript!!.backend)
                 assertFalse(done.transcript!!.warnings.any{it.startsWith("说话人分离未完成")});row.put("status","passed")
             }finally{observer.cancelAndJoin();row.put("thermalAfter",thermal());report.getJSONArray("rows").put(row);output.writeText(report.toString(2))}
         }
