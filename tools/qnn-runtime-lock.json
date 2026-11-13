@@ -11,25 +11,36 @@
     },
     "libQnnHtp.so": {
       "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtp.so",
-      "sha256": "328cf737ca8942c2dde5c6f3e32a113378df2750afb9af1aafdd1775bef59875"
+      "sha256": "328cf737ca8942c2dde5c6f3e32a113378df2750afb9af1aafdd1775bef59875",
+      "sdkPath": "lib/aarch64-android/libQnnHtp.so"
     },
     "libQnnSystem.so": {
       "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnSystem.so",
-      "sha256": "2d42b6bb2710155fa963ee623ce3c320f8a9896b9cfd8dcc25506affb41ab8ab"
+      "sha256": "2d42b6bb2710155fa963ee623ce3c320f8a9896b9cfd8dcc25506affb41ab8ab",
+      "sdkPath": "lib/aarch64-android/libQnnSystem.so"
     },
     "libQnnHtpPrepare.so": {
       "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtpPrepare.so",
-      "sha256": "05cfaff3c2180d7d9006320c16579c5869c2261ba5f891bcaab172ced21c266c"
+      "sha256": "05cfaff3c2180d7d9006320c16579c5869c2261ba5f891bcaab172ced21c266c",
+      "sdkPath": "lib/aarch64-android/libQnnHtpPrepare.so"
     },
     "libQnnHtpV81Stub.so": {
       "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtpV81Stub.so",
-      "sha256": "0fccba2bd6b66d3e5ac32381cfbf5b10b80088055ff6dab712ce99633e3bc8c9"
+      "sha256": "0fccba2bd6b66d3e5ac32381cfbf5b10b80088055ff6dab712ce99633e3bc8c9",
+      "sdkPath": "lib/aarch64-android/libQnnHtpV81Stub.so"
     },
     "libQnnHtpV81Skel.so": {
       "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtpV81Skel.so",
-      "sha256": "2dff3367e70920742e8122cdbebfe4d5f9aa1d88d863a200b663842551d2b6f0"
+      "sha256": "2dff3367e70920742e8122cdbebfe4d5f9aa1d88d863a200b663842551d2b6f0",
+      "sdkPath": "lib/hexagon-v81/unsigned/libQnnHtpV81Skel.so"
     }
   },
   "workerProtocol": 1,
-  "workerSourceSha256": "17c784af28e51b398028e9a58b60d5cf7fd3e955be9dd1c2ca104cd414eaa8c5"
+  "workerSourceSha256": "17c784af28e51b398028e9a58b60d5cf7fd3e955be9dd1c2ca104cd414eaa8c5",
+  "sdkUrl": "https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.40.0.251030/v2.40.0.251030.zip",
+  "notices": {
+    "LICENSE.pdf": "ec1dccfdcba5c6e64126e84199b8362bf4999107bfa567ebe831dbb4c461692b",
+    "NOTICE.txt": "c8a22fa8b9ed3e9266c4a3366965474cef5cb147ee2a1f33e488bbb24a071c09",
+    "QNN_NOTICE.txt": "c8a22fa8b9ed3e9266c4a3366965474cef5cb147ee2a1f33e488bbb24a071c09"
+  }
 }

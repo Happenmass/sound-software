@@ -541,4 +541,5 @@
   <string name="yesterday">"Yesterday"</string>
     <string name="export_duration">%1$d min %2$d sec</string>
     <string name="audio_not_found">The local audio file is missing. Sync the recording first.</string>
+    <string name="transcript_htp">Transcribed with Qualcomm HTP</string>
 </resources>

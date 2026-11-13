@@ -353,6 +353,10 @@ private fun TranscriptTab(vm: AppViewModel, r: Recording, position: Long, playin
                     .padding(horizontal = 12.dp).wrapContentHeight(), maxLines = 1)
             }
         } else Spacer(Modifier.height(12.dp))
+        if (r.transcript?.backend == "qnn-htp") {
+            T(stringResource(R.string.transcript_htp), ts(12, 600, C.Teal),
+                Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
+        }
         if (r.transcript?.warnings?.isNotEmpty() == true) {
             T(r.transcript!!.warnings.first(), ts(12, 400, C.Muted), Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
         }

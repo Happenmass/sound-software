@@ -541,4 +541,5 @@
   <string name="yesterday">"昨天"</string>
     <string name="export_duration">%1$d 分 %2$d 秒</string>
     <string name="audio_not_found">本地音频不存在，请先同步录音</string>
+    <string name="transcript_htp">已使用高通 HTP 转写</string>
 </resources>

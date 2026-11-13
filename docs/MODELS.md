@@ -16,7 +16,20 @@ Use [pyannote segmentation 3.0 for sherpa-onnx](https://github.com/k2-fsa/sherpa
 SOUND_ANDROID_PACKAGE=dev.soundsoftware.app.release bash tools/deploy-models.sh diarization
 ```
 
-## Qualcomm HTP development builds
+## Qualcomm HTP on SM8850
+
+The Releases page provides a CPU APK and an optional NPU APK. Both use the same release package ID and signing key. Install the NPU APK on an ARM64 Snapdragon 8 Elite Gen 5 (SM8850) phone with 4 KB memory pages. The app checks compatibility before running SenseVoice on HTP.
+
+Install the model separately using Python 3.12+ and Android Platform Tools. Open the NPU app once, connect the phone with USB debugging enabled, then run:
+
+```sh
+python3 tools/model-validation/prepare_cache.py sensevoice-qnn-sm8850
+SOUND_ANDROID_PACKAGE=dev.soundsoftware.app.release bash tools/deploy-models.sh qnn-sm8850
+```
+
+Import audio or open a synced recording. Select **SenseVoice · Qualcomm NPU** in **Transcription settings**, then start transcription. The Transcript tab shows **Transcribed with Qualcomm HTP** only after the backend confirms a successful HTP graph execution. Qwen3-ASR and the public APK's speaker diarization use CPU.
+
+## Build the NPU APK
 
 SenseVoice HTP transcription uses the pinned QNN 2.40 runtime and the SM8850 ten-second SenseVoice context model. It was validated on an SM8850 ARM64 phone with 4 KB memory pages. Qwen3-ASR uses the CPU. Speaker diarization has a separate optional HTP path using QNN 2.50.
 
@@ -29,4 +42,10 @@ python3 tools/model-validation/prepare_cache.py sensevoice-qnn-sm8850
 bash tools/deploy-models.sh qnn-sm8850
 ```
 
-See [speaker worker setup](../tools/diarization-worker/README.md) for its separate NPU build. The APK offered on the Releases page uses CPU inference and carries no Qualcomm binaries.
+For a release build, run `./gradlew :app:assembleRelease -PincludeQnn=true -PincludeSpeakerWorker=false -PincludeSpeakerNpu=false` and use your own Android signing key. Put the exact SDK files `LICENSE.pdf`, `NOTICE.txt` and `QNN_NOTICE.txt` in `~/.cache/codex/dependencies/qairt/2.40.0/notices/`. The build verifies them against the runtime lock and includes them in the NPU APK. The same files are required for QNN development builds.
+
+See [speaker worker setup](../tools/diarization-worker/README.md) for its separate, optional NPU development build. The official NPU release includes QNN 2.40 for transcription only.
+
+## QNN distribution
+
+The [official Qualcomm QAIRT Community 2.40.0.251030 SDK](https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.40.0.251030/v2.40.0.251030.zip) supplies the AI Stack License. Section 1(iv) permits object-code distribution as part of an application. Sections 2(b) and 10(h) require retaining the relevant proprietary and third-party notices. The release embeds five byte-for-byte verified runtime libraries and the SDK notices under `assets/licenses/qualcomm-qairt-2.40/`. The [runtime lock](../tools/qnn-runtime-lock.json) records the SDK paths and SHA-256 hashes. Qualcomm libraries are proprietary and covered by Qualcomm's terms. The repository's Apache-2.0 license applies to the project's own code.

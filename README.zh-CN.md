@@ -38,7 +38,7 @@ bash tools/setup-dependencies.sh
 
 未签名包输出至 `app/build/outputs/apk/release/app-release-unsigned.apk`。日常开发可运行 `./gradlew :app:assembleDebug`。分发前请用自己的 Android 签名密钥签名。
 
-公开 APK 使用 CPU 推理。源码保留 SenseVoice 和说话人分离的两条高通 HTP 路径，可在准备好匹配的运行库和模型后选择启用。详见[模型配置](docs/MODELS.md)。
+Release 提供 CPU 包与 SenseVoice NPU 包。NPU 包适用于 SM8850、4 KB 内存页的手机，Qwen3-ASR 仍使用 CPU。模型安装和高通 HTP 构建见[模型配置](docs/MODELS.md)。
 
 ## 许可证
 
