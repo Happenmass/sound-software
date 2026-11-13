@@ -241,7 +241,7 @@
   <string name="loading_device_recordings">"正在读取设备录音…"</string>
   <string name="local_asr_models_missing">"本地语音模型未安装"</string>
   <string name="local_cpu_transcription">"本地转写 · CPU"</string>
-  <string name="local_model_setup_hint">"本地模型需放在 Android/data/dev.soundsoftware.app/files/models/，见「我的 › 本地模型」。"</string>
+  <string name="local_model_setup_hint">"模型目录见「我的 › 本地模型」。"</string>
   <string name="local_models">"本地模型"</string>
   <string name="local_recordings_count">"%1$s 条录音 · 全部保存在这台手机"</string>
   <string name="manage_recordings">"管理设备上的 %1$s 条录音 ›"</string>
@@ -318,7 +318,7 @@
   <string name="processing_failed">"处理失败"</string>
   <string name="processing_notification">"正在转写或整理录音"</string>
   <string name="qa_failed">"问答失败"</string>
-  <string name="qnn_not_configured">"此处理实例未配置QNN组件"</string>
+  <string name="qnn_not_configured">"此安装包未包含 QNN 运行组件"</string>
   <string name="qualcomm_npu">"高通 NPU 加速"</string>
   <string name="queued">"排队中"</string>
   <string name="qwen_language_help">"Qwen3-ASR 自动识别语言"</string>

@@ -93,6 +93,7 @@ class Processor(
     }
 
     fun qnnUnavailableReason(): String? {
+        if (!dev.soundsoftware.app.BuildConfig.QNN_ENABLED) return settings.text(R.string.qnn_not_configured)
         val files = qnnFiles ?: return settings.text(R.string.qnn_not_configured)
         return files.unavailable(dev.soundsoftware.app.inference.QnnFiles.device())
     }
