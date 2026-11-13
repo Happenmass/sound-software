@@ -1,0 +1,16 @@
+Sound Software
+Copyright 2026 Happenmass
+Project source: https://github.com/Happenmass/sound-software
+
+The public APK includes:
+- sherpa-onnx 2.0.1, Apache-2.0
+  https://github.com/k2-fsa/sherpa-onnx/tree/v2.0.1
+- ONNX Runtime 1.28.2, MIT. See ONNX-Runtime-LICENSE.txt and ONNX-Runtime-ThirdPartyNotices.txt.
+  https://github.com/microsoft/onnxruntime/tree/v1.28.2
+- Inter, SIL Open Font License 1.1. See Inter-OFL.txt.
+  https://rsms.me/inter/
+- AndroidX, Jetpack Compose, Kotlin, kotlinx.coroutines, kotlinx.serialization, OkHttp and Okio, Apache-2.0.
+  Versions and repositories are resolved by Gradle from the project dependency declarations.
+
+D3200 compatibility was developed using the protocol reference at https://github.com/tacshi/Soundcore.
+soundcore and product names identify compatible hardware. Sound Software is an independent project.

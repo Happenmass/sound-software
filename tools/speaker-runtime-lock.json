@@ -1,0 +1,23 @@
+{
+  "sherpaVersion": "2.0.1",
+  "ortSha256": "33847ad43bffe204699fd4a27f7f3603452a8cdaf2f9a44983a0bc31ffcf2da1",
+  "cpu": {
+    "name": "libsound_speaker_worker.so",
+    "cachePath": "speaker-parallel-worker/staged/sound-speaker-worker",
+    "sha256": "a2cc8d46918c44d6a12cbace073a7c8302cae7496433d4526b45adf7bf94ff78",
+    "sources": {
+      "tools/diarization-worker/build.py": "5a3c2497b2a4cc68e7dcaac6001fad3e4f928fe191eff0211d2243d53111ea52",
+      "tools/diarization-worker/main.cc": "67beb571843898ad28696c8cf58f8478672211377d08043ba68e66dd41ea2464",
+      "tools/diarization-worker/parallel.h": "6f85b8456cac9688741f978eacb13d7c1329b6a57a62a7a4a517479e80844327"
+    }
+  },
+  "probe": {
+    "name": "libsound_speaker_qnn_probe.so",
+    "cachePath": "qnn-validation/staged/sound-speaker-qnn-probe",
+    "sha256": "91a2892c4acec097ab53a2b36ce5710a16e25d38f18d2f3784351c64994e5335",
+    "sources": {
+      "tools/diarization-worker/qnn-probe.cc": "f723bc809ebc1bf2efa923c0d031fcca1eea0c6f05f9a8e20990e4a6df5519b9",
+      "tools/model-validation/qnn_build.py": "1beed562c694cfd066dbc7a759d051728d69f29de28d04f4a89098ca9e4e31fd"
+    }
+  }
+}

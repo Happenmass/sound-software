@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "samples": [
+    {
+      "id": "sense-zh",
+      "path": "${SOUND_MODEL_CACHE}/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17/test_wavs/zh.wav",
+      "sha256": "b77f1794fe374a0ba1ee1dc458bfaf9349496cbbfc32780c50ba3c5a7ad8e373",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2",
+      "scope": "public_upstream_smoke_not_user_meeting",
+      "metric": "cer"
+    },
+    {
+      "id": "sense-en",
+      "path": "${SOUND_MODEL_CACHE}/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17/test_wavs/en.wav",
+      "sha256": "eb1eb008904465b74c304aad8342e8c7d3c6e61ffe9f66adcaca9cf0f76a93f4",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2",
+      "scope": "public_upstream_smoke_not_user_meeting",
+      "metric": "wer"
+    },
+    {
+      "id": "qwen3-noise2",
+      "path": "${SOUND_MODEL_CACHE}/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/test_wavs/noise2.wav",
+      "sha256": "33f85268f7fbad6b3152b9ab051edab1a85082fde66bccff61d7f5ef7b437e58",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2",
+      "scope": "public_upstream_smoke_not_user_meeting",
+      "metric": "cer",
+      "reference": "拨号，请再说一次，请说出您要拨打的号码。幺三五八幺八八七五七。一三五八二八八八幺八八。纠正纠正。九六九。纠正纠正，不是九六。",
+      "reference_source": "transcript.txt bundled with upstream model archive; not independently audited"
+    },
+    {
+      "id": "qwen3-cantonese",
+      "path": "${SOUND_MODEL_CACHE}/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/test_wavs/cantonese.wav",
+      "sha256": "ec832e035c13c670e0cf68dee0ca5dfae38bf2c583aab31e587441cb3eba3f3f",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2",
+      "scope": "public_upstream_smoke_not_user_meeting",
+      "metric": "mer",
+      "reference": "今次寻寻觅觅，终于揾到my princess，肯借个场俾我哋玩。你知啦，喺香港地喺繁忙时间要揾个场嚟拍嘢系非常之难嘅。再一次多谢你哋，亦都好多谢片入边嘅每一个人。下一次我哋斗啲咩好？喺下面留言话我哋知啦。拜拜。",
+      "reference_source": "transcript.txt bundled with upstream model archive; not independently audited"
+    }
+  ]
+}

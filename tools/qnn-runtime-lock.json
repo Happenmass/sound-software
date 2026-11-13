@@ -1,0 +1,35 @@
+{
+  "sherpaVersion": "2.0.1",
+  "qnnVersion": "2.40.0.251030",
+  "soc": "SM8850",
+  "maxSamples": 160000,
+  "ortSha256": "33847ad43bffe204699fd4a27f7f3603452a8cdaf2f9a44983a0bc31ffcf2da1",
+  "files": {
+    "libsound_qnn_runner.so": {
+      "cachePath": "qnn-validation/staged/sound-qnn-worker",
+      "sha256": "07061d86aa938ddf05853e14436c60f64117c32e8b64c54464bc86f7be589471"
+    },
+    "libQnnHtp.so": {
+      "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtp.so",
+      "sha256": "328cf737ca8942c2dde5c6f3e32a113378df2750afb9af1aafdd1775bef59875"
+    },
+    "libQnnSystem.so": {
+      "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnSystem.so",
+      "sha256": "2d42b6bb2710155fa963ee623ce3c320f8a9896b9cfd8dcc25506affb41ab8ab"
+    },
+    "libQnnHtpPrepare.so": {
+      "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtpPrepare.so",
+      "sha256": "05cfaff3c2180d7d9006320c16579c5869c2261ba5f891bcaab172ced21c266c"
+    },
+    "libQnnHtpV81Stub.so": {
+      "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtpV81Stub.so",
+      "sha256": "0fccba2bd6b66d3e5ac32381cfbf5b10b80088055ff6dab712ce99633e3bc8c9"
+    },
+    "libQnnHtpV81Skel.so": {
+      "cachePath": "models/sherpa-onnx/qnn-libs-2.40.0.251030/libQnnHtpV81Skel.so",
+      "sha256": "2dff3367e70920742e8122cdbebfe4d5f9aa1d88d863a200b663842551d2b6f0"
+    }
+  },
+  "workerProtocol": 1,
+  "workerSourceSha256": "17c784af28e51b398028e9a58b60d5cf7fd3e955be9dd1c2ca104cd414eaa8c5"
+}

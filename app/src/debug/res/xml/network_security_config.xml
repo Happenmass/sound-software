@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: lets emulator tests reach a mock service through `adb reverse`. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="false">localhost</domain></domain-config>
+</network-security-config>
