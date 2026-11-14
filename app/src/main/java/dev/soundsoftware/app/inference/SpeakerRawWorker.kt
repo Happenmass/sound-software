@@ -8,7 +8,7 @@ import java.io.File
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 
-data class SpeakerWorkerConfig(val executable:File,val nativeDir:File,val workers:Int=4,val intraThreads:Int=1,val diagnostics:Boolean=false,val minimumDurationMs:Long=0,val npu:SpeakerNpuRuntime?=null,val validateNpu:Boolean=false,val burst:Boolean=true,val firstHtpBatch4:Boolean=false,val profileHtp:Boolean=false) {
+data class SpeakerWorkerConfig(val executable:File,val nativeDir:File,val workers:Int=4,val intraThreads:Int=1,val diagnostics:Boolean=false,val minimumDurationMs:Long=0,val npu:SpeakerNpuRuntime?=null,val validateNpu:Boolean=false,val burst:Boolean=true,val profileHtp:Boolean=false) {
     init {require(workers in 1..4 && intraThreads in 1..4 && minimumDurationMs>=0)}
 }
 data class SpeakerNpuEvidence(val htpExecutions:Int,val validated:Int,val minCosine:Double,val maxAbsError:Double,val burst:Boolean,val embeddings:Int=0,val cleanTurnExecutions:Int=0)
@@ -34,7 +34,6 @@ class SpeakerRawWorker(private val config:SpeakerWorkerConfig,private val modelD
             environment["SOUND_SPEAKER_NPU_RUNTIME"]=it.runtimeDir.path
             environment["SOUND_SPEAKER_NPU_MODELS"]=it.modelDir.path
             if(config.validateNpu)environment["SOUND_SPEAKER_NPU_VALIDATE"]="1"
-            if(config.firstHtpBatch4)environment["SOUND_SPEAKER_FIRST_BATCH4"]="1"
             if(config.profileHtp)environment["SOUND_SPEAKER_NPU_PROFILE"]="1"
             if(config.burst)environment["SOUND_SPEAKER_NPU_BURST"]="1"
         }
@@ -95,7 +94,7 @@ class SpeakerRawWorker(private val config:SpeakerWorkerConfig,private val modelD
                             }
                         }
                         val after=checkNotNull(evidence){"缺少第二轮NPU执行证据"}
-                        check(after.embeddings-before.embeddings==populated && after.htpExecutions-before.htpExecutions==(if(populated>0)1 else 0))
+                        check(after.embeddings-before.embeddings==populated && after.htpExecutions-before.htpExecutions==populated)
                     }
                     cleanVectors=vectors
                     cleanMs=(System.nanoTime()-started)/1e6

@@ -74,54 +74,37 @@ class SpeakerHtpValidationTest {
                 val result=analyze(file,count,mode=="npu");results[mode]=result
                 report.getJSONArray("rows").put(row(file,count,mode,result,SystemClock.elapsedRealtime()-start,thermal).put("repetition",rep));output.writeText(report.toString(2))
                 assertEquals(if(mode=="cpu")"cpu-parallel" else "qnn-htp-hybrid",result.backend);assertEquals(2,result.turns.map{it.speaker}.filter{it>=0}.distinct().size)
-                if(mode=="npu"){assertTrue(result.npu!!.htpExecutions>0);assertEquals(0,result.npu!!.validated);assertTrue(result.npu!!.burst);if(count==null)assertTrue(result.npu!!.cleanTurnExecutions>0) else assertEquals(0,result.npu!!.cleanTurnExecutions)}
+                if(mode=="npu"){assertTrue(result.npu!!.htpExecutions>0);assertEquals(0,result.npu!!.validated);assertTrue(result.npu!!.burst);assertEquals(if(count==null)6 else 0,result.npu!!.cleanTurnExecutions)}
             }
             val exact=canonical(results.getValue("cpu").turns)==canonical(results.getValue("npu").turns)
             report.put("lastPairExact",exact);output.writeText(report.toString(2));assertTrue(exact);assertEquals(results.getValue("cpu").warnings,results.getValue("npu").warnings)
         }
         report.put("status","complete");output.writeText(report.toString(2))
     }
-    @Test fun firstPassBatchComparison()=runBlocking {
+    @Test fun sharedGraphSpeedAndAttribution()=runBlocking {
         enabled()
         val file=File(root,"dialog.wav")
+        assertEquals("46d10e76f54f3249b2628148beb542c5b7f30c04471d392a302fa3217068c2a7",file.sha256())
         val wav=PcmWav.open(file)
-        val modelDir=File(app.modelDir,"diarization")
-        val output=File(root,"first-pass-batches.json")
-        val report=JSONObject().put("rows",JSONArray())
-        val repetitions=(args.getString("repetitions") ?: "3").toInt().also{require(it in 1..3)}
-        val repetitionsOrder=listOf(false,true,true,false,false,true).take(repetitions*2)
-        val modeArg=args.getString("firstBatch")
-        val count=if(args.getString("fixedCount")=="true")2 else null
-        val profiling=args.getString("profileHtp")!="false"
-        var expected:List<Triple<Long,Long,Int>>?=null
-        for(batch4 in repetitionsOrder.filter{modeArg==null || (modeArg=="4")==it}) {
-            val config=configuration(true).copy(diagnostics=profiling,profileHtp=profiling,firstHtpBatch4=batch4)
-            val diarizer=SherpaDiarizer(modelDir,4,config)
-            val thermal=context.getSystemService(PowerManager::class.java).currentThermalStatus
-            val started=SystemClock.elapsedRealtimeNanos()
-            val result=withContext(Dispatchers.Default){diarizer.analyze(wav,count){}}
-            val wallMs=(SystemClock.elapsedRealtimeNanos()-started)/1e6
-            val entry=row(file,count,if(batch4)"4+4" else "1+4",result,wallMs.toLong(),thermal)
-                .put("wallMs",wallMs)
-                .put("profile",JSONArray(result.diagnostics.filter{it.startsWith("SOUND_SPEAKER_PROFILE ")}
-                    .map{JSONObject(it.removePrefix("SOUND_SPEAKER_PROFILE "))}))
-                .put("nativeTimers",JSONArray(result.diagnostics.filter{it.contains("OfflineSpeakerDiarization:")}))
-            report.getJSONArray("rows").put(entry)
-            output.writeText(report.toString(2))
-            val proof=checkNotNull(result.npu)
-            val firstCalls=if(batch4)18 else 71
-            assertEquals(firstCalls,proof.htpExecutions-proof.cleanTurnExecutions)
-            assertEquals(if(count==null)2 else 0,proof.cleanTurnExecutions)
-            assertEquals(if(count==null)77 else 71,proof.embeddings)
-            assertEquals(2,entry.getInt("speakers"))
-            assertEquals("qnn-htp-hybrid",result.backend)
-            assertEquals(emptyList<String>(),result.warnings)
-            val canonical=canonical(result.turns)
-            expected?.let{assertEquals(it,canonical)}
-            expected=canonical
-        }
-        report.put("status","complete")
-        output.writeText(report.toString(2))
+        val diarizer=SherpaDiarizer.forDevice(context,File(app.modelDir,"diarization"))
+        val thermal=context.getSystemService(PowerManager::class.java).currentThermalStatus
+        val started=SystemClock.elapsedRealtimeNanos()
+        val result=withContext(Dispatchers.Default){diarizer.analyze(wav,null){}}
+        val wallMs=(SystemClock.elapsedRealtimeNanos()-started)/1e6
+        val entry=row(file,null,"production",result,wallMs.toLong(),thermal).put("wallMs",wallMs)
+        File(root,"shared-graph.json").writeText(entry.toString(2))
+        val proof=checkNotNull(result.npu)
+        val cleanCalls=6
+        assertEquals("qnn-htp-hybrid",result.backend)
+        assertEquals(71,proof.htpExecutions-proof.cleanTurnExecutions)
+        assertEquals(cleanCalls,proof.cleanTurnExecutions)
+        assertEquals(77,proof.embeddings)
+        assertEquals(0,proof.validated)
+        assertEquals(emptyList<String>(),result.warnings)
+        assertEquals(listOf(
+            Triple(655L,8316L,0),Triple(8940L,14864L,1),Triple(16028L,22525L,0),
+            Triple(23149L,29899L,1),Triple(31030L,39029L,0),Triple(39552L,43973L,1),
+        ),canonical(result.turns))
     }
     @Test fun actualNpuCancellationAndExplicitLocalFallback()=runBlocking {
         enabled();val input=PcmWav.open(File(root,"dialog.wav"))

@@ -45,7 +45,9 @@ void Embed(const std::string &request, const std::vector<float> &samples,
     inputs.push_back(stream.get());
     streams.push_back(std::move(stream));
   }
-  auto vectors = extractor.ComputeBatch(inputs, 4);
+  std::vector<std::vector<float>> vectors;
+  vectors.reserve(inputs.size());
+  for (auto *input : inputs) vectors.push_back(extractor.Compute(input));
   sherpa_onnx::PrintSoundSpeakerNpuStats("clean");
   std::cout << "SOUND_DIAR {\"type\":\"embeddings\",\"vectors\":[";
   for (size_t i = 0; i < vectors.size(); ++i) {

@@ -9,12 +9,12 @@ def patch_batch_sources(root: Path):
             raise RuntimeError(f"Unexpected sherpa source: {name}")
         path.write_text(text.replace(before, after))
 
-    signature = "std::vector<std::vector<float>> ComputeBatch(const std::vector<OnlineStream *> &streams, int batch) const"
+    signature = "std::vector<std::vector<float>> ComputeBatch(const std::vector<OnlineStream *> &streams) const"
     replace("speaker-embedding-extractor.h", "  std::vector<float> Compute(OnlineStream *s) const;",
             f"  std::vector<float> Compute(OnlineStream *s) const;\n  {signature};")
     replace("speaker-embedding-extractor.cc", "  return impl_->Compute(s);\n}",
             f"  return impl_->Compute(s);\n}}\n\n{signature.replace('ComputeBatch', 'SpeakerEmbeddingExtractor::ComputeBatch')}" + """ {
-  return impl_->ComputeBatch(streams, batch);
+  return impl_->ComputeBatch(streams);
 }""")
     replace("speaker-embedding-extractor-impl.h", "  virtual std::vector<float> Compute(OnlineStream *s) const = 0;",
             f"  virtual std::vector<float> Compute(OnlineStream *s) const = 0;\n  virtual {signature}" + """ {
@@ -24,7 +24,7 @@ def patch_batch_sources(root: Path):
   }""")
     name = "speaker-embedding-extractor-general-impl.h"
     replace(name, "  std::vector<float> Compute(OnlineStream *s) const override {", """  std::vector<float> Compute(OnlineStream *s) const override {
-    return ComputeBatch({s}, 1).front();
+    return ComputeBatch({s}).front();
   }
 
   """ + signature + """ override {
@@ -36,7 +36,7 @@ def patch_batch_sources(root: Path):
       inputs.push_back(Features(streams[index], features[index]));
       indices.push_back(index);
     }
-    auto embeddings = model_.ComputeBatch(std::move(inputs), batch);
+    auto embeddings = model_.ComputeBatch(std::move(inputs));
     for (size_t i = 0; i < indices.size(); ++i) {
       const auto *begin = embeddings[i].GetTensorData<float>();
       const auto count = embeddings[i].GetTensorTypeAndShapeInfo().GetElementCount();
@@ -60,11 +60,11 @@ def patch_batch_sources(root: Path):
 
 """ + text[end:])
     replace("speaker-embedding-extractor-model.h", "  Ort::Value Compute(Ort::Value x) const;",
-            "  Ort::Value Compute(Ort::Value x) const;\n  std::vector<Ort::Value> ComputeBatch(std::vector<Ort::Value> inputs, int batch) const;")
-    replace("speaker-embedding-extractor-model.cc", "  const SpeakerEmbeddingExtractorModelMetaData &GetMetaData() const {", """  std::vector<Ort::Value> ComputeBatch(std::vector<Ort::Value> inputs, int batch) const {
+            "  Ort::Value Compute(Ort::Value x) const;\n  std::vector<Ort::Value> ComputeBatch(std::vector<Ort::Value> inputs) const;")
+    replace("speaker-embedding-extractor-model.cc", "  const SpeakerEmbeddingExtractorModelMetaData &GetMetaData() const {", """  std::vector<Ort::Value> ComputeBatch(std::vector<Ort::Value> inputs) const {
     if (inputs.empty()) return {};
     if (std::getenv("SOUND_SPEAKER_NPU_MODELS")) {
-      auto accelerated = SoundSpeakerNpu().ComputeBatch(inputs, batch);
+      auto accelerated = SoundSpeakerNpu().ComputeBatch(inputs);
       if (std::getenv("SOUND_SPEAKER_NPU_VALIDATE")) {
         for (size_t i = 0; i < inputs.size(); ++i) {
           auto reference = sess_->Run({}, input_names_ptr_.data(), &inputs[i], 1,
@@ -85,36 +85,6 @@ def patch_batch_sources(root: Path):
 }
 
 std::vector<Ort::Value> SpeakerEmbeddingExtractorModel::ComputeBatch(
-    std::vector<Ort::Value> inputs, int batch) const {
-  return impl_->ComputeBatch(std::move(inputs), batch);
+    std::vector<Ort::Value> inputs) const {
+  return impl_->ComputeBatch(std::move(inputs));
 }""")
-    name = "offline-speaker-diarization-pyannote-impl.h"
-    path = root / name
-    text = path.read_text()
-    text = '#include "sherpa-onnx/csrc/qnn/sound-npu-embedding.h"\n' + text
-    start = text.index("      SoundSpeakerParallelFor(sample_indexes.size(),")
-    end = text.index("      for(int32_t i=0;", start)
-    text = text[:start] + """      const int32_t batch_size = SoundSpeakerFirstBatch();
-      const auto count = static_cast<int32_t>(sample_indexes.size());
-      SoundSpeakerParallelFor((count + batch_size - 1) / batch_size, [&](int32_t batch) {
-        std::vector<std::unique_ptr<OnlineStream>> streams;
-        std::vector<OnlineStream *> inputs;
-        const int32_t start = batch * batch_size;
-        const int32_t end = std::min(count, start + batch_size);
-        for (int32_t i = start; i < end; ++i) {
-          auto stream = embedding_extractor_.CreateStream();
-          for (const auto &range : sample_indexes[i]) {
-            const int32_t length = std::min(range.second, n) - range.first;
-            if (length > 0) stream->AcceptWaveform(sample_rate, audio + range.first, length);
-          }
-          stream->InputFinished();
-          if (!embedding_extractor_.IsReady(stream.get()))
-            throw std::runtime_error("speaker input too short");
-          inputs.push_back(stream.get());
-          streams.push_back(std::move(stream));
-        }
-        auto embeddings = embedding_extractor_.ComputeBatch(inputs, batch_size);
-        std::move(embeddings.begin(), embeddings.end(), vectors.begin() + start);
-      });
-""" + text[end:]
-    path.write_text(text)

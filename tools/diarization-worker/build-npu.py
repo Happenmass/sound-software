@@ -34,5 +34,5 @@ for p in (cache/'qnn-validation/build-arm64/_deps').glob('*-src'):options['FETCH
 for command,name in [([str(cmake),'-S',str(source),'-B',str(build),'-G','Ninja']+[f'-D{k}={v}' for k,v in options.items()],'configure.log'),([str(cmake),'--build',str(build),'--target','sound-speaker-npu-worker','-j','6'],'build.log')]:
  print(name,flush=True)
  with (root/name).open('w') as log:subprocess.run(command,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
-out=root/'staged/sound-speaker-npu-worker';out.parent.mkdir(exist_ok=True);shutil.copyfile(build/'bin/sound-speaker-npu-worker',out)
+out=cache/'speaker-npu-shared-batch1-worker/staged/sound-speaker-npu-worker';out.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(build/'bin/sound-speaker-npu-worker',out)
 subprocess.run([str(ndk/'toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip'),str(out)],check=True);print(out,flush=True)

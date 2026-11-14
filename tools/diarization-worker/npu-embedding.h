@@ -47,11 +47,12 @@ class SoundNpuEmbedding {
     Ort::SessionOptions options;options.SetIntraOpNumThreads(1);
     head_=std::make_unique<Ort::Session>(env_,(m+"/embedding-head.onnx").c_str(),options);
   }
-  ~SoundNpuEmbedding(){head_.reset();batch4_.reset();batch1_.reset();if(power_id_)perf_.destroyPowerConfigId(power_id_);backend_.reset();}
-  std::vector<Ort::Value> ComputeBatch(const std::vector<Ort::Value>& inputs, int batch) {
+  ~SoundNpuEmbedding(){head_.reset();body_.reset();if(power_id_)perf_.destroyPowerConfigId(power_id_);backend_.reset();}
+  std::vector<Ort::Value> ComputeBatch(const std::vector<Ort::Value>& inputs) {
+    constexpr int batch = 1;
     constexpr size_t kFeatures = 80, kFrames = 1024;
     constexpr size_t kChannels = 1024 * 10, kColumns = 128;
-    if ((batch != 1 && batch != 4) || inputs.empty() || inputs.size() > static_cast<size_t>(batch))
+    if (inputs.size() != 1)
       throw std::runtime_error("Invalid HTP speaker batch");
     const auto pack_start = Clock::now();
     std::vector<float> features(batch * kFeatures * kFrames);
@@ -89,10 +90,10 @@ class SoundNpuEmbedding {
     size_t output_bytes;
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      auto &body = batch == 1 ? batch1_ : batch4_;
+      auto &body = body_;
       if (!body) {
         const auto started = Clock::now();
-        const auto name = batch == 1 ? "/eres2netv2-masked.bin" : "/eres2netv2-masked-batch4.bin";
+        constexpr auto name = "/eres2netv2-masked.bin";
         body = std::make_unique<QnnModel>(models_ + name, runtime_ + "/libQnnSystem.so",
                                           backend_.get(), BinaryContextTag{}, false);
         if (!body->IsInitialized()) throw std::runtime_error("HTP embedding context rejected");
@@ -122,12 +123,11 @@ class SoundNpuEmbedding {
       output_bytes = body->TensorSizeInBytes("trunk");
       if (trunk.size() != batch * kChannels * kColumns)
         throw std::runtime_error("HTP output length changed");
-      if (batch == 1) crop(trunk);
+      crop(trunk);
       ++executions_;
       embeddings_ += inputs.size();
     }
 
-    if (batch == 4) crop(trunk);
     const auto head_start = Clock::now();
     const auto memory = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeDefault);
     const char *in = "trunk", *out = "embedding";
@@ -149,7 +149,7 @@ class SoundNpuEmbedding {
     const auto head_ms = Milliseconds(head_start);
     if (profile_) {
       std::lock_guard<std::mutex> lock(profile_mutex_);
-      auto &stats = batch == 1 ? single_stats_ : batch_stats_;
+      auto &stats = stats_;
       ++stats.calls;
       stats.load += load_ms;
       stats.pack += pack_ms;
@@ -179,18 +179,17 @@ class SoundNpuEmbedding {
   void PrintProfile(const char *phase) {
     if (!profile_) return;
     std::lock_guard<std::mutex> lock(profile_mutex_);
-    for (const auto *stats : {&single_stats_, &batch_stats_}) {
-      if (stats->calls == 0) continue;
+    const auto *stats = &stats_;
+    if (stats->calls != 0) {
       std::cout << "SOUND_SPEAKER_PROFILE {\"phase\":\"" << phase
-                << "\",\"batch\":" << (stats == &single_stats_ ? 1 : 4)
+                << "\",\"batch\":1"
                 << ",\"calls\":" << stats->calls << ",\"loadMs\":" << stats->load
                 << ",\"packMs\":" << stats->pack << ",\"inputMs\":" << stats->input
                 << ",\"graphMs\":" << stats->graph << ",\"outputMs\":" << stats->output
                 << ",\"cropMs\":" << stats->crop << ",\"headMs\":" << stats->head
                 << ",\"outputBytes\":" << stats->output_bytes << '}' << std::endl;
     }
-    single_stats_ = {};
-    batch_stats_ = {};
+    stats_ = {};
   }
  private:
   using Clock = std::chrono::steady_clock;
@@ -203,11 +202,11 @@ class SoundNpuEmbedding {
   };
   bool profile_ = std::getenv("SOUND_SPEAKER_NPU_PROFILE") != nullptr;
   std::mutex profile_mutex_;
-  Profile single_stats_, batch_stats_;
+  Profile stats_;
   std::string runtime_, models_;
   Ort::Env env_;
   std::unique_ptr<QnnBackend> backend_;
-  std::unique_ptr<QnnModel> batch1_, batch4_;
+  std::unique_ptr<QnnModel> body_;
   std::unique_ptr<Ort::Session> head_;
   QnnHtpDevice_PerfInfrastructure_t perf_{};uint32_t power_id_=0;bool burst_=false;
   std::mutex mutex_;int executions_=0,embeddings_=0,validated_=0;double min_cosine_=1,max_error_=0;
@@ -221,9 +220,6 @@ inline SoundNpuEmbedding& SoundSpeakerNpu() {
   static const bool registered = (SoundSpeakerNpuInstance() = &instance, true);
   (void)registered;
   return instance;
-}
-inline int SoundSpeakerFirstBatch() {
-  return std::getenv("SOUND_SPEAKER_FIRST_BATCH4") ? 4 : 1;
 }
 inline void PrintSoundSpeakerNpuStats(const char *phase) {
   if (auto *instance = SoundSpeakerNpuInstance()) {

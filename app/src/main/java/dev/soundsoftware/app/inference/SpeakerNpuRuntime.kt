@@ -11,7 +11,7 @@ class SpeakerNpuRuntime(context:Context,val modelDir:File,private val originalMo
     private val context=context.applicationContext
     val runtimeDir=File(this.context.codeCacheDir,"speaker-qnn-2.50-v1")
     private val manifest by lazy {JSONObject(this.context.assets.open("speaker-npu-manifest.json").bufferedReader().use{it.readText()})}
-    val isReady get()=listOf("eres2netv2-masked.bin","eres2netv2-masked-batch4.bin","embedding-head.onnx").all{File(modelDir,it).isFile} &&
+    val isReady get()=listOf("eres2netv2-masked.bin","embedding-head.onnx").all{File(modelDir,it).isFile} &&
         runCatching {
             val models=manifest.getJSONArray("validatedDeviceModels")
             (0 until models.length()).any{models.getString(it)==android.os.Build.MODEL}
@@ -38,7 +38,7 @@ class SpeakerNpuRuntime(context:Context,val modelDir:File,private val originalMo
         check(names.all{File(runtimeDir,it).isFile && File(runtimeDir,it).sha256()==libraries.getString(it)}){"NPU运行库未完整安装"}
     }
     companion object {
-        const val MODEL_DIRECTORY="diarization-npu-batch4"
+        const val MODEL_DIRECTORY="diarization-npu"
         private val lock=Any()
     }
 }
