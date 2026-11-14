@@ -16,9 +16,9 @@ import org.junit.rules.TemporaryFolder
 class LocalAsrAdapterTest {
     @get:Rule val folder = TemporaryFolder()
 
-    private fun request(): AsrRequest {
+    private fun request(durationMs: Int = 2500): AsrRequest {
         val file = File(folder.root, "input.wav")
-        PcmWav.writeMono(file, FloatArray(40000) { 0.1f })
+        PcmWav.writeMono(file, FloatArray(durationMs * 16) { 0.1f })
         return AsrRequest("job", "attempt", AudioInput.fromWav(file), "profile-1")
     }
 
@@ -65,6 +65,38 @@ class LocalAsrAdapterTest {
         ), result.segments)
     }
 
+    @Test fun packsContinuousSpeakerTurnsAtSpeechBoundariesWithin24Seconds() = runBlocking {
+        val runtime = FakeRuntime(maxSamples = 24 * 16_000)
+        val result = LocalAsrAdapter(runtime, speakerTurns = listOf(
+            SpeakerTurn(0, 10_000, 4),
+            SpeakerTurn(11_000, 20_000, 4),
+            SpeakerTurn(20_500, 28_000, 4),
+            SpeakerTurn(28_500, 44_500, 4),
+            SpeakerTurn(46_000, 47_000, 4),
+            SpeakerTurn(47_000, 48_000, 9),
+        )).transcribe(request(48_000))
+
+        // Short pauses count toward the model limit. A 1.5s pause or speaker change ends the group.
+        assertEquals(listOf(20, 24, 1, 1).map { it * 16_000 }, runtime.windowSizes)
+        assertEquals(listOf(0L, 46_000L, 47_000L), result.segments.map { it.startMs })
+        assertEquals(listOf(44_500L, 47_000L, 48_000L), result.segments.map { it.endMs })
+        assertEquals(listOf("spk-4", "spk-4", "spk-9"), result.segments.map { it.speaker })
+        assertEquals(listOf(2, 0, 0), result.segments.map { it.fragments.size })
+    }
+
+    @Test fun splitsAnOverlongTurnAndPacksItsTailWithTheNextTurn() = runBlocking {
+        val runtime = FakeRuntime(maxSamples = 24 * 16_000)
+        val result = LocalAsrAdapter(runtime, speakerTurns = listOf(
+            SpeakerTurn(0, 7_000, 1),
+            SpeakerTurn(7_500, 34_000, 1),
+            SpeakerTurn(34_500, 36_500, 1),
+        )).transcribe(request(36_500))
+
+        assertEquals(listOf(7, 24, 5).map { it * 16_000 }, runtime.windowSizes)
+        assertEquals(36_500L, result.segments.single().endMs)
+        assertEquals(3, result.segments.single().fragments.size)
+    }
+
     @Test fun requiredPreciseTimestampFailsBeforeModelLoad() = runBlocking {
         val runtime = FakeRuntime()
         try {
@@ -107,11 +139,13 @@ class LocalAsrAdapterTest {
         assertEquals("completed", result.segments.first().text)
     }
 
-    private class FakeRuntime(private val failAt: Int = -1) : LocalAsrRuntime {
+    private class FakeRuntime(
+        private val failAt: Int = -1,
+        override val maxSamples: Int = 16000,
+    ) : LocalAsrRuntime {
         override val modelId = "test-model"
         override val runtimeName = "fixture"
         override val backend = "fixture"
-        override val maxSamples = 16000
         var calls = 0; var prepares = 0
         val windowSizes = mutableListOf<Int>()
         override suspend fun prepare() { prepares++ }

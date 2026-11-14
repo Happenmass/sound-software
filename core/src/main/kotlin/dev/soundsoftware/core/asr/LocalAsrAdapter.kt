@@ -49,7 +49,7 @@ class LocalAsrAdapter(
             val batches = if (groups.isEmpty()) {
                 splitSpeechRanges(vad.detect(wav), runtime.maxSamples).map { RecognitionBatch(listOf(it)) }
             } else groups.map { group ->
-                RecognitionBatch(speakerWindows(group, wav.sampleRate, runtime.maxSamples), group.first().speaker)
+                RecognitionBatch(packSpeakerWindows(group, wav.sampleRate, runtime.maxSamples), group.first().speaker)
             }
             val key = checkpointKey(request, descriptor) + "|$inputPlan|${runtime.maxSamples}"
             val segments = mutableListOf<TranscriptSegment>()
@@ -99,13 +99,13 @@ class LocalAsrAdapter(
 
 private data class RecognitionBatch(val windows: List<SpeechRange>, val speaker: Int? = null)
 
-private fun speakerWindows(turns: List<SpeakerTurn>, sampleRate: Int, maxSamples: Int): List<SpeechRange> {
+/** Pack a continuous speaker group in order, keeping each speech range intact when it fits. */
+private fun packSpeakerWindows(turns: List<SpeakerTurn>, sampleRate: Int, maxSamples: Int): List<SpeechRange> {
     val ranges = turns.map { SpeechRange(it.startMs * sampleRate / 1000, it.endMs * sampleRate / 1000) }
-    val maxGapSamples = 600L * sampleRate / 1000
     val windows = mutableListOf<SpeechRange>()
     for (range in splitSpeechRanges(ranges, maxSamples)) {
         val last = windows.lastOrNull()
-        if (last != null && range.startSample - last.endSample <= maxGapSamples && range.endSample - last.startSample <= maxSamples) {
+        if (last != null && range.endSample - last.startSample <= maxSamples) {
             windows[windows.lastIndex] = last.copy(endSample = range.endSample)
         } else {
             windows += range
