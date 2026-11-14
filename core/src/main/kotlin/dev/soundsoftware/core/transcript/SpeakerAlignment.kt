@@ -2,11 +2,40 @@ package dev.soundsoftware.core.transcript
 
 import dev.soundsoftware.core.model.Segment
 import dev.soundsoftware.core.model.Speaker
-import dev.soundsoftware.core.vad.SpeechRange
 
 /** One diarization turn on the original recording time axis. */
 data class SpeakerTurn(val startMs: Long, val endMs: Long, val speaker: Int) {
     init { require(startMs >= 0 && endMs > startMs) }
+}
+
+private const val MIN_SILENCE_MS = 1500L
+
+/** Groups consecutive turns of a known speaker while keeping the original cuts for ASR. */
+internal fun groupSpeakerTurns(turns: List<SpeakerTurn>, durationMs: Long): List<List<SpeakerTurn>> {
+    val maxDurationMs = 5 * 60 * 1000L
+    val groups = mutableListOf<MutableList<SpeakerTurn>>()
+    var coveredUntil = 0L
+    var previousSpeaker: Int? = null
+    for (turn in turns.sortedBy { it.startMs }) {
+        var start = maxOf(coveredUntil, turn.startMs)
+        val end = minOf(durationMs, turn.endMs)
+        while (start < end) {
+            val partEnd = minOf(end, start + maxDurationMs)
+            val part = SpeakerTurn(start, partEnd, turn.speaker)
+            val group = groups.lastOrNull()
+            val first = group?.first()
+            if (first != null && part.speaker >= 0 && previousSpeaker == part.speaker && first.speaker == part.speaker &&
+                start - group.last().endMs < MIN_SILENCE_MS && partEnd - first.startMs <= maxDurationMs) {
+                group.add(part)
+            } else {
+                groups.add(mutableListOf(part))
+            }
+            start = partEnd
+            coveredUntil = partEnd
+        }
+        previousSpeaker = turn.speaker
+    }
+    return groups
 }
 
 /**
@@ -38,12 +67,6 @@ fun mergeTurns(turns: List<SpeakerTurn>, maxGapMs: Long = 600, maxLenMs: Long = 
     return result
 }
 
-fun List<SpeakerTurn>.toSpeechRanges(sampleRate: Int, totalSamples: Long): List<SpeechRange> = mapNotNull {
-    val start = it.startMs * sampleRate / 1000
-    val end = minOf(totalSamples, it.endMs * sampleRate / 1000)
-    if (end > start) SpeechRange(start, end) else null
-}
-
 /**
  * Gives each timed segment the speaker with the largest time overlap. Segments without
  * timestamps or overlap stay unattributed rather than guessed.
@@ -73,7 +96,7 @@ fun speakerStats(segments: List<Segment>): Map<String, SpeakerStats> {
 }
 
 /** Gaps of at least [minGapMs] between timed segments, used by "skip silence" playback. */
-fun silentGaps(segments: List<Segment>, durationMs: Long, minGapMs: Long = 1500): List<LongRange> {
+fun silentGaps(segments: List<Segment>, durationMs: Long, minGapMs: Long = MIN_SILENCE_MS): List<LongRange> {
     val timed = segments.filter { it.startMs != null && it.endMs != null }.sortedBy { it.startMs }
     if (timed.isEmpty()) return emptyList()
     val gaps = mutableListOf<LongRange>()

@@ -285,6 +285,11 @@
   <string name="notes_ready">"纪要已就绪"</string>
   <string name="notes_service">"纪要服务"</string>
   <string name="notes_service_help">"用于生成摘要、待办、章节与 AI 问答"</string>
+  <string name="repair_transcript">"LLM 精校"</string>
+  <string name="repair_transcript_help">"将同一说话人的连续本地转写文本发给此服务，接续跨窗断句并修正明显错字。适用于新转写或重新转写。"</string>
+  <string name="repairing_transcript">"正在精校逐字稿 %1$d/%2$d"</string>
+  <string name="repair_transcript_failed">"LLM 精校未完成，未精校的段落保留识别原文。"</string>
+  <string name="repair_transcript_needs_service">"启用 LLM 精校前，请填写纪要服务地址和模型。"</string>
   <string name="notes_service_privacy">"OpenAI 兼容接口 · 只发送逐字稿文字"</string>
   <string name="notes_setup_help">"配置纪要服务后，可根据逐字稿生成摘要、待办与章节。只发送文字，不上传音频。"</string>
   <string name="notes_stale">"逐字稿、说话人或重点标记已更新，这份纪要可能已过期；可重新生成。"</string>

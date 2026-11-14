@@ -17,6 +17,7 @@ Download the signed APK from [Releases](https://github.com/Happenmass/sound-soft
 1. Open the app. In **Device**, find and pair a recorder, or use **Settings → Import audio file**.
 2. For local transcription, select Qwen3-ASR under **Settings → Default transcription settings**. The app prepares the model on first use.
 3. To generate notes or use the assistant, configure an HTTPS endpoint and model in **Settings → Notes service**. The assistant requires a model that supports tool calls.
+4. Enable **LLM proofreading** in the same settings to send consecutive transcript fragments from the same speaker to the configured service. It can join sentences split across recognition windows and correct clear recognition errors. The setting starts off and applies when you transcribe or retranscribe a recording.
 
 The release provides one signed NPU APK. Local transcription targets ARM64 SM8850 phones with 4 KB memory pages and has been verified on the HONOR Magic V6. The app lists compatible models and their installation status under **Settings → Local models**. See the [model guide](docs/MODELS.md#transcription-models) for storage and build details.
 
@@ -30,9 +31,13 @@ On the HONOR Magic V6, the original 24-second INT8 export explicitly copied KV h
 
 ## Speaker analysis on Qualcomm HTP
 
-Version 0.1.9 reuses one batch-1 HTP graph for both speaker embedding passes. Automatic speaker counting uses the same context for its clean-speech pass. If HTP is unavailable or fails, speaker analysis runs on the local CPU. In v0.1.9 the speaker weights are installed separately. Source builds with bundled speaker weights prepare them automatically on first analysis. See the [model guide](docs/MODELS.md#speaker-diarization).
+The v0.1.10 APK includes the batch-1 HTP speaker model and the local CPU fallback weights. The app unpacks them on first speaker analysis. Both speaker embedding passes share one HTP graph, including the clean-speech pass during automatic speaker counting. If HTP is unavailable or fails, speaker analysis runs on the local CPU. See the [model guide](docs/MODELS.md#speaker-diarization).
 
 On the HONOR Magic V6, a 44.969-second two-speaker sample took **4.276 s** to analyze automatically, compared with **4.517 s** when the second pass used a separate batch-4 graph. The second pass fell from **0.805 to 0.476 s**, and peak worker RSS fell from **432.25 to 359.73 MiB**. Both versions produced the same six boundaries and speaker assignments. Timing covers speaker analysis.
+
+## Transcript continuity
+
+On-device transcription groups consecutive speech from each identified speaker into passages of up to five minutes. Each Qwen3-ASR inference still uses at most 24 seconds of audio. With LLM proofreading enabled, the configured notes service receives the ordered text fragments for a passage. The app keeps its speaker and time range. If proofreading fails, unprocessed passages retain the recognized text.
 
 ## Build from source
 

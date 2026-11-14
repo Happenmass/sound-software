@@ -4,6 +4,7 @@ import dev.soundsoftware.app.R
 import dev.soundsoftware.app.inference.QwenHtpFiles
 import dev.soundsoftware.app.inference.QwenHtpRuntime
 import dev.soundsoftware.app.data.RecordingRepository
+import dev.soundsoftware.app.data.LlmSettings
 import dev.soundsoftware.app.data.SettingsStore
 import dev.soundsoftware.app.inference.SherpaDiarizer
 import dev.soundsoftware.core.analysis.LlmConfig
@@ -16,10 +17,6 @@ import dev.soundsoftware.core.model.*
 import dev.soundsoftware.core.transcript.SpeakerTurn
 import dev.soundsoftware.core.transcript.assignSpeakers
 import dev.soundsoftware.core.transcript.mergeTurns
-import dev.soundsoftware.core.transcript.toSpeechRanges
-import dev.soundsoftware.core.vad.SpeechRange
-import dev.soundsoftware.core.vad.VoiceActivityDetector
-import dev.soundsoftware.core.vad.WholeRecordingVad
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -29,12 +26,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
-
-/** Speech windows produced by diarization, so ASR boundaries coincide with speaker turns. */
-private class TurnWindows(private val ranges: List<SpeechRange>, revision: Int) : VoiceActivityDetector {
-    override val id = "diarization-turns-$revision"
-    override suspend fun detect(wav: PcmWav) = ranges
-}
 
 data class AsrProfile(val id: String, val titleRes: Int, val subtitleRes: Int, val local: Boolean)
 
@@ -144,6 +135,10 @@ class Processor(
             val wav = withContext(Dispatchers.IO) { PcmWav.open(repository.audioFile(id)) }
             repository.update(id) { it.copy(stage = ProcessingStage.TRANSCRIBING, stageText = settings.text(R.string.preparing), error = null) }
             val warnings = mutableListOf<String>()
+            val llm = settings.state.value.llm
+            val repair = if (llm.repairTranscript && llm.baseUrl.isNotBlank() && llm.model.isNotBlank()) {
+                runCatching { analyzer(llm = llm) }.getOrNull()
+            } else null
             var turns: List<SpeakerTurn>? = null
             var speakerHtpExecutions = 0
             if (diarizer.isReady && wav.durationMs <= SherpaDiarizer.MAX_DURATION_MS) {
@@ -154,15 +149,35 @@ class Processor(
                         speakerHtpExecutions = if (it.turns.isEmpty()) 0 else it.npu?.htpExecutions ?: 0
                     }.turns
                 }.onFailure { if (it is CancellationException) throw it; warnings += settings.text(R.string.speaker_analysis_failed, it.message) }.getOrNull()
-                    ?.let { mergeTurns(it) }?.takeIf { it.isNotEmpty() }
+                    ?.takeIf { it.isNotEmpty() }
             } else if (!diarizer.isReady) warnings += settings.text(R.string.speaker_models_missing)
             val base = if (turns != null) 0.25f else 0f
             progress(id, ProcessingStage.TRANSCRIBING, base, settings.text(R.string.transcribing))
             val result = recognize(id, options, turns, base)
-            var segments = result.segments.map { Segment(it.id, it.text, it.startMs, it.endMs) }
-            var speakers = emptyList<Speaker>()
-            if (turns != null && result.timestampQuality != TimestampQuality.NONE) {
-                val (assigned, list) = assignSpeakers(segments, turns); segments = assigned; speakers = list
+            val repairCount = if (repair == null) 0 else result.segments.count { it.speaker != null && it.fragments.size > 1 }
+            var repaired = 0
+            var repairFailed = false
+            val recognized = result.segments.map { segment ->
+                var text = segment.text
+                if (repair != null && !repairFailed && segment.speaker != null && segment.fragments.size > 1) {
+                    repaired++
+                    progress(id, ProcessingStage.TRANSCRIBING, null, settings.text(R.string.repairing_transcript, repaired, repairCount))
+                    try {
+                        val corrected = withTimeoutOrNull(45_000) { repair.repairTranscript(segment.fragments) }
+                        if (corrected == null) repairFailed = true else text = corrected
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        repairFailed = true
+                    }
+                }
+                Segment(segment.id, text, segment.startMs, segment.endMs, segment.speaker)
+            }
+            if (repairFailed) warnings.add(0, settings.text(R.string.repair_transcript_failed))
+            val (segments, speakers) = if (options.profileId == "http-api" && turns != null && result.timestampQuality != TimestampQuality.NONE) {
+                assignSpeakers(recognized, mergeTurns(turns))
+            } else {
+                recognized to recognized.mapNotNull { it.speakerId }.distinct().mapIndexed { index, id -> Speaker(id, index + 1) }
             }
             val transcript = Transcript(segments, result.provenance.model, result.provenance.backend, result.timestampQuality.name,
                 System.currentTimeMillis(), warnings + result.warnings, speakerHtpExecutions)
@@ -183,7 +198,6 @@ class Processor(
 
     private suspend fun recognize(id: String, options: TranscribeOptions, turns: List<SpeakerTurn>?, base: Float): AsrResult {
         val audio = withContext(Dispatchers.IO) { AudioInput.fromWav(repository.audioFile(id), id) }
-        val wav = withContext(Dispatchers.IO) { PcmWav.open(audio.file) }
         val engine: AsrEngine = when (options.profileId) {
             "http-api" -> {
                 val remote = settings.state.value.remoteAsr
@@ -192,8 +206,7 @@ class Processor(
             "qwen-htp" -> {
                 val files = qwenHtpFiles ?: throw AsrException(ErrorCode.BACKEND_UNAVAILABLE, settings.text(R.string.qwen_htp_not_bundled))
                 val runtime = QwenHtpRuntime(files, File(checkpointDir, "qwen-htp-windows"))
-                val vad = turns?.let { TurnWindows(it.toSpeechRanges(16000, wav.sampleCount), it.hashCode()) } ?: WholeRecordingVad()
-                LocalAsrAdapter(runtime, vad)
+                LocalAsrAdapter(runtime, speakerTurns = turns.orEmpty())
             }
             else -> throw AsrException(ErrorCode.BACKEND_UNAVAILABLE, settings.text(R.string.unknown_asr))
         }
@@ -215,8 +228,7 @@ class Processor(
 
     private fun analysisDirectory(id: String) = File(checkpointDir, "analysis/${UUID.nameUUIDFromBytes(id.toByteArray())}")
 
-    private fun analyzer(recordingId: String? = null): MeetingAnalyzer {
-        val llm = settings.state.value.llm
+    private fun analyzer(recordingId: String? = null, llm: LlmSettings = settings.state.value.llm): MeetingAnalyzer {
         val url = llm.baseUrl.trim().trimEnd('/').plus("/").toHttpUrl()
         val key = settings.secrets.get(KEY_LLM) // Keep credentials paired with this generation's endpoint/model snapshot.
         return MeetingAnalyzer(LlmConfig(url, llm.model.trim(), allowInsecureForTests = debugLoopback(url), outputLanguage = settings.outputLanguage()), { key }, client = analysisClient,

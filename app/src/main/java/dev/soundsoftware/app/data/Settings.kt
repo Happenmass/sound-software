@@ -22,7 +22,7 @@ import kotlinx.serialization.json.Json
 
 @Serializable data class RemoteAsrSettings(val endpoint: String = "", val model: String = "", val segmentTimestamps: Boolean = false)
 
-@Serializable data class LlmSettings(val baseUrl: String = "", val model: String = "")
+@Serializable data class LlmSettings(val baseUrl: String = "", val model: String = "", val repairTranscript: Boolean = false)
 
 @Serializable
 data class AppSettings(

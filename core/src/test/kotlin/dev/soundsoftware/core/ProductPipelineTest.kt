@@ -21,17 +21,23 @@ import org.junit.Test
 class ProductPipelineTest {
     private fun seg(id: String, start: Long, end: Long, speaker: String? = null, text: String = id) = Segment(id, text, start, end, speaker)
 
-    @Test fun mergeTurnsJoinsSameSpeakerSplitsLongAndRemovesOverlap() {
-        val merged = mergeTurns(listOf(
-            SpeakerTurn(0, 1000, 0), SpeakerTurn(1200, 2000, 0), // joined across 200 ms pause
-            SpeakerTurn(1800, 3000, 1), // overlap trimmed to start at 2000
-            SpeakerTurn(3000, 50_000, 0), // split into 20 s windows
-        ))
-        assertEquals(SpeakerTurn(0, 2000, 0), merged[0])
-        assertEquals(SpeakerTurn(2000, 3000, 1), merged[1])
-        assertEquals(listOf(3000L, 23000L, 43000L), merged.drop(2).map { it.startMs })
-        assertTrue(merged.all { it.endMs - it.startMs <= 20_000 })
-        merged.zipWithNext().forEach { (a, b) -> assertTrue(a.endMs <= b.startMs) }
+    @Test fun speakerGroupsKeepCutPointsAndStopAtFiveMinutes() {
+        val groups = groupSpeakerTurns(listOf(
+            SpeakerTurn(0, 1000, 0), SpeakerTurn(2200, 3000, 0),
+            SpeakerTurn(2950, 3100, 1), // a short interjection stays with its own speaker
+            SpeakerTurn(3300, 600_000, 0), SpeakerTurn(600_000, 601_000, 0),
+            SpeakerTurn(602_500, 603_000, 0), // preserve silence between otherwise adjacent turns
+            SpeakerTurn(603_000, 604_000, -1), SpeakerTurn(604_000, 605_000, -1),
+        ), durationMs = 604_500)
+        assertEquals(listOf(
+            listOf(SpeakerTurn(0, 1000, 0), SpeakerTurn(2200, 3000, 0)),
+            listOf(SpeakerTurn(3000, 3100, 1)),
+            listOf(SpeakerTurn(3300, 303_300, 0)),
+            listOf(SpeakerTurn(303_300, 600_000, 0), SpeakerTurn(600_000, 601_000, 0)),
+            listOf(SpeakerTurn(602_500, 603_000, 0)),
+            listOf(SpeakerTurn(603_000, 604_000, -1)),
+            listOf(SpeakerTurn(604_000, 604_500, -1)),
+        ), groups)
     }
 
     @Test fun assignSpeakersByLargestOverlapAndNumbersByFirstAppearance() {

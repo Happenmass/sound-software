@@ -41,6 +41,23 @@ class MeetingWorkflowTest {
     private fun analyzer(server: MockWebServer, cache: AnalysisCheckpoints = NoAnalysisCheckpoints, chunk: Int = 12000) =
         MeetingAnalyzer(LlmConfig(server.url("/v1/"), "fake-model", true, chunk, 16000), { "fake-key" }, checkpoints = cache)
 
+    @Test fun transcriptRepairSendsOnlyOrderedFragmentsAndPreservesSpokenLanguage() = runBlocking {
+        MockWebServer().use { server ->
+            val service = MeetingAnalyzer(LlmConfig(server.url("/v1/"), "fake-model", true, outputLanguage = "en"), { null })
+            val fragments = listOf("我明天会发", "Qwen 的报告。")
+            server.enqueue(response(buildJsonObject { put("text", "我明天会发 Qwen 的报告。") }))
+            assertEquals("我明天会发 Qwen 的报告。", service.repairTranscript(fragments))
+            val request = json.parseToJsonElement(server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8()).jsonObject
+            val messages = request.getValue("messages").jsonArray
+            assertEquals(MeetingPrompts.REPAIR_TRANSCRIPT, messages[0].jsonObject.getValue("content").jsonPrimitive.content)
+            val input = json.parseToJsonElement(messages[1].jsonObject.getValue("content").jsonPrimitive.content).jsonObject
+            assertEquals(setOf("fragments"), input.keys)
+            assertEquals(fragments, input.getValue("fragments").jsonArray.map { it.jsonPrimitive.content })
+            server.enqueue(response(buildJsonObject { put("text", " ") }))
+            assertTrue(runCatching { service.repairTranscript(fragments) }.exceptionOrNull() is AnalysisException)
+        }
+    }
+
     @Test fun unsupportedOwnerDoesNotDiscardGroundedNotes() = runBlocking {
         MockWebServer().use { server ->
             val evidence = ref("s1", "周三前提交")

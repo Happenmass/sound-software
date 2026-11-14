@@ -67,6 +67,14 @@ class MeetingAnalyzer(
         val facts: Map<String, List<Fact>>, val todos: List<TodoItem>, val chapters: List<Chapter>)
     private data class Answer(val raw: JsonObject, val found: Boolean, val text: String, val refs: List<EvidenceRef>)
 
+    suspend fun repairTranscript(fragments: List<String>): String {
+        require(fragments.size > 1 && fragments.none { it.isBlank() })
+        val input = buildJsonObject { put("fragments", buildJsonArray { fragments.forEach { add(it) } }) }
+        val result = parseObject(chat(MeetingPrompts.REPAIR_TRANSCRIPT, input, localizeOutput = false))
+        result.only("text")
+        return result.string("text").trim()
+    }
+
     suspend fun summarize(recording: Recording, template: SceneTemplate, hotwords: List<String>, onProgress: (String) -> Unit = {}): MeetingSummary {
         require(template != SceneTemplate.TRANSCRIPT_ONLY)
         val source = parts(recording)
@@ -410,12 +418,12 @@ class MeetingAnalyzer(
         recording.id, transcriptHash(recording),recording.hardwareHighlightsStatus, *parameters,
     ).forEach { add(it) } }.toString())
 
-    private suspend fun chat(system: String, data: JsonObject): String = withContext(Dispatchers.IO) {
+    private suspend fun chat(system: String, data: JsonObject, localizeOutput: Boolean = true): String = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             put("model", config.model)
             put("reasoning_effort", config.reasoningEffort)
             put("messages", buildJsonArray {
-                add(buildJsonObject { put("role", "system"); put("content", if (config.outputLanguage == "en") {
+                add(buildJsonObject { put("role", "system"); put("content", if (localizeOutput && config.outputLanguage == "en") {
                         system.replace("用简体中文输出严格JSON", "用英语输出严格JSON") +
                             "\nWrite all generated prose in English. Keep source quotations, names, and due dates copied from the transcript unchanged."
                     } else system) })

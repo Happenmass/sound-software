@@ -285,6 +285,11 @@
   <string name="notes_ready">"Notes ready"</string>
   <string name="notes_service">"Notes service"</string>
   <string name="notes_service_help">"Used to generate summaries, action items, and chapters, and to answer questions."</string>
+  <string name="repair_transcript">"LLM proofreading"</string>
+  <string name="repair_transcript_help">"Send consecutive on-device transcript fragments from the same speaker to this service to join cut-off sentences and fix clear errors. Applies to new and repeated transcriptions."</string>
+  <string name="repairing_transcript">"Proofreading transcript %1$d/%2$d"</string>
+  <string name="repair_transcript_failed">"LLM proofreading was interrupted. Unprocessed paragraphs retain the original transcript."</string>
+  <string name="repair_transcript_needs_service">"Enter the notes service URL and model before enabling LLM proofreading."</string>
   <string name="notes_service_privacy">"OpenAI-compatible API · Sends transcript text"</string>
   <string name="notes_setup_help">"Set up a notes service to generate summaries, action items and chapters. Only transcript text is sent."</string>
   <string name="notes_stale">"The transcript, speakers or highlights have changed. Regenerate the notes to update them."</string>

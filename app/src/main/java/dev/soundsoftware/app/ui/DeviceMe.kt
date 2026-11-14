@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -197,10 +198,14 @@ fun LlmServiceScreen(vm: AppViewModel) {
     var base by remember { mutableStateOf(settings.llm.baseUrl) }
     var model by remember { mutableStateOf(settings.llm.model) }
     var key by remember { mutableStateOf("") }
+    var repair by rememberSaveable { mutableStateOf(settings.llm.repairTranscript) }
     ServiceForm(stringResource(R.string.notes_service), stringResource(R.string.notes_service_help),
         listOf(Triple("Base URL", base) { v: String -> base = v }, Triple(stringResource(R.string.model), model) { v: String -> model = v }),
-        key, { key = it }, vm.hasSecret(Processor.KEY_LLM), onBack = { vm.back() }) {
-        if (vm.saveLlm(LlmSettings(base, model), key.ifBlank { null })) { vm.say(vm.app.getString(R.string.saved)); vm.back() }
+        key, { key = it }, vm.hasSecret(Processor.KEY_LLM), extra = {
+            SettingRow(stringResource(R.string.repair_transcript), subtitle = stringResource(R.string.repair_transcript_help),
+                trailing = { WebCheckbox(repair, { repair = it }, label = stringResource(R.string.repair_transcript)) }, divider = false) { repair = !repair }
+        }, onBack = { vm.back() }) {
+        if (vm.saveLlm(LlmSettings(base, model, repair), key.ifBlank { null })) { vm.say(vm.app.getString(R.string.saved)); vm.back() }
     }
 }
 

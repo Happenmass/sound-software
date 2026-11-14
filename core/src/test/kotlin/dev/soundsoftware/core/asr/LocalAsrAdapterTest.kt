@@ -1,6 +1,7 @@
 package dev.soundsoftware.core.asr
 
 import dev.soundsoftware.core.audio.PcmWav
+import dev.soundsoftware.core.transcript.SpeakerTurn
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
@@ -44,6 +45,24 @@ class LocalAsrAdapterTest {
         val second = FakeRuntime()
         LocalAsrAdapter(second).transcribe(request.copy(profileRevision = "profile-2"), AsrExecutionContext(store))
         assertEquals(3, second.calls)
+    }
+
+    @Test fun mergesAudioBeforeDecodeAndKeepsOneSegmentAcrossModelWindows() = runBlocking {
+        val runtime = FakeRuntime()
+        val adapter = LocalAsrAdapter(runtime, speakerTurns = listOf(
+            SpeakerTurn(0, 350, 4), SpeakerTurn(450, 900, 4), SpeakerTurn(950, 1450, 4),
+            SpeakerTurn(1500, 1600, 9), SpeakerTurn(1800, 2000, 4), SpeakerTurn(2100, 2500, -1),
+        ))
+        val result = adapter.transcribe(request())
+        // The first two fragments go into the same model call. The next fragment exceeds
+        // this runtime's 1s limit and starts at its original boundary instead of 1000ms.
+        assertEquals(listOf(14_400, 8_000, 1_600, 3_200, 6_400), runtime.windowSizes)
+        assertEquals(listOf(
+            TranscriptSegment("part-0", "测试 English 测试 English", 0, 1450, "spk-4", listOf("测试 English", "测试 English")),
+            TranscriptSegment("part-1", "测试 English", 1500, 1600, "spk-9"),
+            TranscriptSegment("part-2", "测试 English", 1800, 2000, "spk-4"),
+            TranscriptSegment("part-3", "测试 English", 2100, 2500),
+        ), result.segments)
     }
 
     @Test fun requiredPreciseTimestampFailsBeforeModelLoad() = runBlocking {
@@ -94,8 +113,10 @@ class LocalAsrAdapterTest {
         override val backend = "fixture"
         override val maxSamples = 16000
         var calls = 0; var prepares = 0
+        val windowSizes = mutableListOf<Int>()
         override suspend fun prepare() { prepares++ }
         override suspend fun decode(samples: FloatArray, sampleRate: Int): LocalRecognition {
+            windowSizes += samples.size
             calls++
             if (calls == failAt) throw AsrException(ErrorCode.BACKEND_UNAVAILABLE, "fixture failure")
             return LocalRecognition("测试 English")

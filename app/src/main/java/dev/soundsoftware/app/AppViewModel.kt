@@ -169,6 +169,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (key != null) app.settings.secrets.put(Processor.KEY_ASR, key.trim())
     }.onFailure { say(it.message) }.isSuccess
     fun saveLlm(llm: LlmSettings, key: String?) = runCatching {
+        require(!llm.repairTranscript || (llm.baseUrl.isNotBlank() && llm.model.isNotBlank())) {
+            app.getString(R.string.repair_transcript_needs_service)
+        }
         if (llm.baseUrl.isNotBlank()) {
             val url = llm.baseUrl.trim().toHttpUrl(); require(url.isHttps || Processor.debugLoopback(url)) { app.getString(R.string.llm_https_required) }
             require(llm.model.isNotBlank()) { app.getString(R.string.enter_model_name) }
