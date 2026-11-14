@@ -69,8 +69,8 @@ android {
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
         buildConfigField("boolean", "PI_ENABLED", includePi.toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
-        versionCode = 10
-        versionName = "0.1.8"
+        versionCode = 11
+        versionName = "0.1.9"
         testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }

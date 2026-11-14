@@ -28,6 +28,12 @@ Version 0.1.8 accepts up to 24 seconds of audio per inference. The bundled Qwen3
 
 On the HONOR Magic V6, the original 24-second INT8 export explicitly copied KV heads. Removing those copies reduced the time for one complete AR1 graph call, including all 28 layers and token selection, from **191.03 to 47.26 ms/token (4.04× faster, 75% less time)** at 120 valid history positions. On the same 24-second audio clip, the previous 8-second OnSpeak47 release transcribed three consecutive chunks in **2.24 s**, and this 24-second GQA export transcribed the clip in one pass in **4.36 s**, excluding model load. The longer window preserves context across the previous 8-second boundaries.
 
+## Speaker analysis on Qualcomm HTP
+
+Version 0.1.9 reuses one batch-1 HTP graph for both speaker embedding passes. Automatic speaker counting uses the same context for its clean-speech pass. If HTP is unavailable or fails, speaker analysis runs on the local CPU. The speaker weights are [installed separately](docs/MODELS.md#speaker-npu-model-setup).
+
+On the HONOR Magic V6, a 44.969-second two-speaker sample took **4.276 s** to analyze automatically, compared with **4.517 s** when the second pass used a separate batch-4 graph. The second pass fell from **0.805 to 0.476 s**, and peak worker RSS fell from **432.25 to 359.73 MiB**. Both versions produced the same six boundaries and speaker assignments. Timing covers speaker analysis.
+
 ## Build from source
 
 Use JDK 17, Android SDK Platform 35, and the included Gradle wrapper.
