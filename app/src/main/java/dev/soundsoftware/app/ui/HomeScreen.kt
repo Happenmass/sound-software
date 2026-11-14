@@ -75,28 +75,43 @@ fun MainScreen(vm: AppViewModel, onImport: () -> Unit, onRequestPermissions: () 
 
 @Composable
 private fun BottomNav(tab: Tab, onSelect: (Tab) -> Unit, onAssistant: () -> Unit, modifier: Modifier) {
-    val shape = RoundedCornerShape(32.dp)
     Row(
         modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 22.dp)
-            .width(340.dp).height(64.dp)
-            .shadow(16.dp, shape, ambientColor = Color(0x290C0D10), spotColor = Color(0x290C0D10))
-            .clip(shape).background(Color(0xF2FFFFFF)).border(1.dp, Color(0xB3FFFFFF), shape).padding(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .width(344.dp).height(72.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        NavTab(Tab.RECORDINGS, tab, Icons.Wave, stringResource(R.string.recordings), onSelect)
-        NavTab(Tab.TODOS, tab, Icons.Todo, stringResource(R.string.todos), onSelect)
-        Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
-            Box(
-                Modifier.size(52.dp).clip(CircleShape).background(C.Blue)
-                    .tap(stringResource(R.string.recording_assistant), onClick = onAssistant),
-                Alignment.Center,
-            ) {
-                T("Pi", ts(29, 800, Color.White), maxLines = 1)
-            }
+        NavGroup(Modifier.weight(1f)) {
+            NavTab(Tab.RECORDINGS, tab, Icons.Wave, stringResource(R.string.recordings), onSelect)
+            NavTab(Tab.TODOS, tab, Icons.Todo, stringResource(R.string.todos), onSelect)
         }
-        NavTab(Tab.DEVICE, tab, Icons.Bean, stringResource(R.string.device), onSelect)
-        NavTab(Tab.ME, tab, Icons.Person, stringResource(R.string.settings), onSelect)
+        val piShape = RoundedCornerShape(22.dp)
+        Box(
+            Modifier.align(Alignment.Top).size(60.dp)
+                .shadow(10.dp, piShape, ambientColor = C.Ink.copy(alpha = 0.16f), spotColor = C.Ink.copy(alpha = 0.22f))
+                .clip(piShape)
+                .background(Brush.verticalGradient(listOf(Color(0xFF334A68), Color(0xFF1A263C))))
+                .tap(stringResource(R.string.recording_assistant), onClick = onAssistant),
+            Alignment.Center,
+        ) {
+            T("Pi", ts(29, 800, Color.White), maxLines = 1)
+        }
+        NavGroup(Modifier.weight(1f)) {
+            NavTab(Tab.DEVICE, tab, Icons.Bean, stringResource(R.string.device), onSelect)
+            NavTab(Tab.ME, tab, Icons.Person, stringResource(R.string.settings), onSelect)
+        }
     }
+}
+
+@Composable
+private fun NavGroup(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
+    val shape = RoundedCornerShape(28.dp)
+    Row(
+        modifier.height(56.dp)
+            .shadow(8.dp, shape, ambientColor = Color(0x210C0D10), spotColor = Color(0x210C0D10))
+            .clip(shape).background(C.Card).border(1.dp, C.Line, shape).padding(4.dp),
+        content = content,
+    )
 }
 
 @Composable
