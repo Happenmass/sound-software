@@ -21,15 +21,16 @@ val preparePi by tasks.registering(Exec::class) {
 val includeAsrWeights = providers.gradleProperty("includeAsrWeights").getOrElse("false").toBoolean()
 val prepareAsrWeights by tasks.registering(Exec::class) {
     val output = layout.buildDirectory.dir("generated/bundledAsrAssets")
-    inputs.files(rootProject.file("tools/prepare-bundled-asr.py"), rootProject.file("tools/qwen-npu-worker/artifacts.json"))
+    inputs.files(rootProject.file("tools/prepare-bundled-asr.py"), rootProject.file("tools/qwen-npu-worker/qnn24/models.json"))
     outputs.dir(output)
     commandLine("python3", rootProject.file("tools/prepare-bundled-asr.py"), "--output", output.get().asFile)
 }
 val prepareQwenHtp by tasks.registering(Exec::class) {
-    val worker = rootProject.file("tools/qwen-npu-worker")
+    val worker = rootProject.file("tools/qwen-npu-worker/qnn24")
     val jni = layout.buildDirectory.dir("generated/qwenHtpJni")
     val assets = layout.buildDirectory.dir("generated/qwenHtpAssets")
-    inputs.files(worker.listFiles()?.filter { it.extension in setOf("cc", "h", "json", "py") }.orEmpty())
+    inputs.files(worker.listFiles()?.filter { it.extension in setOf("cc", "hpp", "json", "py") }.orEmpty())
+    inputs.files(rootProject.file("tools/speaker-npu-runtime-lock.json"), rootProject.file("tools/prepare-qnn-notices.py"))
     outputs.dirs(jni, assets)
     commandLine("python3", worker.resolve("build.py"), "--jni", jni.get().asFile, "--assets", assets.get().asFile)
 }
@@ -68,8 +69,8 @@ android {
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
         buildConfigField("boolean", "PI_ENABLED", includePi.toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
-        versionCode = 9
-        versionName = "0.1.7"
+        versionCode = 10
+        versionName = "0.1.8"
         testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
@@ -109,7 +110,7 @@ android {
     }
     if (includeSpeakerWorker) sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerJni"))
     if (includeSpeakerNpu) {
-        sourceSets.getByName("release").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuNotices"))
+        if (!includeQwenHtp) sourceSets.getByName("release").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuNotices"))
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerNpuJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuAssets"))
     }

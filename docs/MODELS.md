@@ -4,7 +4,7 @@ On-device transcription in current builds uses a compatible NPU. The signed NPU 
 
 ## Transcription models
 
-The signed NPU APK includes the Qwen3-ASR runtime and weights. Local transcription targets ARM64 SM8850 with 4 KB memory pages and was tested on the HONOR Magic V6. On first use, the app prepares the selected model from the APK in app-private storage. Allow about 900 MB of additional space for model preparation. Existing matching model files can be reused. Choose Qwen3-ASR NPU in **Settings → Default transcription settings** or for an individual recording. Older local profiles, including SenseVoice, migrate to Qwen3-ASR. Existing transcripts retain their original text and provenance.
+The signed NPU APK includes the Qwen3-ASR runtime and weights. Local transcription targets ARM64 SM8850 with 4 KB memory pages and was tested on the HONOR Magic V6. On first use, the app prepares the selected model from the APK in app-private storage. Allow about 964 MB of additional space for model preparation. Existing matching model files can be reused. Choose Qwen3-ASR NPU in **Settings → Default transcription settings** or for an individual recording. Older local profiles, including SenseVoice, migrate to Qwen3-ASR. Existing transcripts retain their original text and provenance.
 
 ### Source build inputs and separate model setup
 
@@ -12,11 +12,20 @@ For a source build with bundled weights, use the pinned model downloads below. T
 
 ### Qwen3-ASR NPU
 
-Download the [pinned OnSpeak47 v2.2.0-npu model](https://github.com/DS-PNQ/OnSpeak47-npu-models/releases/tag/v2.2.0-npu) with the GitHub CLI, then install it:
+The pinned 24-second W8 GQA export is bundled in the [v0.1.8 NPU APK](https://github.com/Happenmass/sound-software/releases/tag/v0.1.8). For a source build, extract the assets from that signed APK into the shared model cache. The build checks each file against the pinned hashes.
 
 ```sh
-model_dir="$HOME/.cache/codex/models/qwen3-asr-onspeak47-sm8850/v2.2.0-npu"
-gh release download v2.2.0-npu -R DS-PNQ/OnSpeak47-npu-models --dir "$model_dir" --skip-existing
+model_dir="$HOME/.cache/codex/models/qwen3-asr-sm8850/0.6b-w8fp16-24s-kv1024-gqa64-shared-kv"
+apk=SoundSoftware-0.1.8-NPU-SM8850-arm64-v8a.apk
+mkdir -p "$model_dir"
+unzip -j "$apk" 'assets/asr-models/qwen-htp-sm8850/*' -d "$model_dir"
+unzip -p "$apk" assets/licenses/asr-models/qwen3-asr-LICENSE > "$model_dir/LICENSE"
+unzip -p "$apk" assets/licenses/asr-models/qwen3-asr-NOTICE > "$model_dir/NOTICE"
+```
+
+For an APK built without bundled weights, run:
+
+```sh
 python3 tools/qwen-npu-worker/deploy.py --serial SERIAL --package dev.soundsoftware.app.release
 ```
 
@@ -42,7 +51,7 @@ Close and reopen the app after installing the models. Speaker acceleration is se
 
 ## Build the NPU APK
 
-Qwen3-ASR uses an isolated QAIRT 2.51 runtime and ONNX Runtime 1.29. Speaker diarization has a separate optional HTP path using QNN 2.50.
+Qwen3-ASR calls QAIRT 2.50 directly from an isolated worker process. The optional speaker accelerator uses the same SDK in a separate worker.
 
 The public APK includes the on-device Pi assistant runtime. Install Node.js 22.19 or newer, Python 3.11 or newer, and Android NDK 28.2.13676358.
 
@@ -58,6 +67,4 @@ Prepare the [speaker worker](../tools/diarization-worker/README.md) and extract 
 
 ## QNN distribution
 
-The [official Qualcomm QAIRT Community 2.50.0.260828 SDK](https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.50.0.260828/v2.50.0.260828.zip) uses the same AI Stack License. The NPU APK includes the four byte-for-byte verified libraries in `assets/speaker-npu-runtime.zip`, which the app loads separately from the Qwen runtime. The original 2.50 notices are under `assets/licenses/qualcomm-qairt-2.50/`. See the [speaker runtime lock](../tools/speaker-npu-runtime-lock.json) for hashes and the exact SDK build. The source repository and v0.1.2 CPU APK carry no Qualcomm runtime binaries.
-
-The Qwen3-ASR runtime uses the pinned Qualcomm QAIRT 2.51.0 Maven package. The APK includes its original AI Stack License and notice in `assets/licenses/qwen-npu/`, along with the ONNX Runtime, QNN execution provider and Kiss FFT licenses and notices. See the [artifact manifest](../tools/qwen-npu-worker/artifacts.json) for sources and checksums.
+The [official Qualcomm QAIRT Community 2.50.0.260828 SDK](https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.50.0.260828/v2.50.0.260828.zip) uses the same AI Stack License. The NPU APK includes four byte-for-byte verified libraries in each worker’s runtime archive. The original 2.50 notices are under `assets/licenses/qualcomm-qairt-2.50/`. See the [speaker runtime lock](../tools/speaker-npu-runtime-lock.json) for hashes and the exact SDK build. The source repository and v0.1.2 CPU APK carry no Qualcomm runtime binaries.

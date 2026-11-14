@@ -83,7 +83,7 @@ python3 tools/diarization-worker/build-npu.py
 python3 tools/deploy-speaker-npu-models.py --serial SERIAL
 ```
 
-`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP。Qwen3-ASR 使用独立的 2.51 运行时。当前只有锁文件的 `validatedDeviceModels` 中的 PNM-AN10 自动启用，且时长至少 20 秒；权重缺失时走 CPU。权重约 49MB，另行部署，不在 APK 中。安装公开版后，用 `--package dev.soundsoftware.app.release` 部署模型。构建时从同版 SDK 根目录验证并复制原始许可及声明。
+`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP。Qwen3-ASR 同样使用 QAIRT 2.50，在独立进程中运行。当前只有锁文件的 `validatedDeviceModels` 中的 PNM-AN10 自动启用，且时长至少 20 秒；权重缺失时走 CPU。权重约 49MB，另行部署，不在 APK 中。安装公开版后，用 `--package dev.soundsoftware.app.release` 部署模型。构建时从同版 SDK 根目录验证并复制原始许可及声明。
 
 ## NPU 真机验收
 

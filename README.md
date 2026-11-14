@@ -22,6 +22,12 @@ The release provides one signed NPU APK. Local transcription targets ARM64 SM885
 
 The public package ID is `dev.soundsoftware.app.release`. Install the new APK over the previous public APK to retain its recordings and settings.
 
+## Qwen3-ASR NPU performance
+
+Version 0.1.8 accepts up to 24 seconds of audio per inference. The bundled Qwen3-ASR 0.6B export keeps the full 151,936-token vocabulary and uses INT8 projection weights. The 64-token prefill graph and single-token decode graph share decoder weights and a 1,024-slot KV buffer. Grouped-query attention (GQA) lets each pair of query heads reuse the same key and value head without materializing copies.
+
+On the HONOR Magic V6, the original 24-second INT8 export explicitly copied KV heads. Removing those copies reduced the time for one complete AR1 graph call, including all 28 layers and token selection, from **191.03 to 47.26 ms/token (4.04× faster, 75% less time)** at 120 valid history positions. On the same 24-second audio clip, the previous 8-second OnSpeak47 release transcribed three consecutive chunks in **2.24 s**, and this 24-second GQA export transcribed the clip in one pass in **4.36 s**, excluding model load. The longer window preserves context across the previous 8-second boundaries.
+
 ## Build from source
 
 Use JDK 17, Android SDK Platform 35, and the included Gradle wrapper.

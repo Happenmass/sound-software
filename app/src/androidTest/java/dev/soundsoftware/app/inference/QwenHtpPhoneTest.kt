@@ -96,11 +96,11 @@ class QwenHtpPhoneTest {
             assertEquals("qwen-htp", done.options?.profileId)
             val transcript = checkNotNull(done.transcript)
             assertEquals("qnn-htp", transcript.backend)
-            assertTrue(transcript.model.contains("OnSpeak47"))
-            assertTrue(transcript.segments.size > 2)
+            assertTrue(transcript.model.contains("24s-W8"))
+            assertTrue(transcript.segments.isNotEmpty())
             val ends = transcript.segments.mapNotNull { it.endMs }
             assertTrue(ends.size == transcript.segments.size && ends.max() <= duration)
-            assertTrue(ends.max() >= duration - 8_000)
+            assertTrue(ends.max() >= duration - 24_000)
             if (duration >= 20_000 && dev.soundsoftware.app.BuildConfig.SPEAKER_NPU_ENABLED)
                 assertTrue(transcript.speakerHtpExecutions > 0)
         } finally {

@@ -9,8 +9,9 @@ import subprocess
 import uuid
 
 root = Path(__file__).resolve().parent
-models = json.loads((root / "artifacts.json").read_text())["models"]
-default = Path.home() / ".cache/codex/models/qwen3-asr-onspeak47-sm8850/v2.2.0-npu"
+lock = json.loads((root / "qnn24/models.json").read_text())
+models = lock["models"]
+default = Path.home() / ".cache/codex/models" / lock["modelDirectory"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--serial", required=True)

@@ -22,6 +22,12 @@ Release 提供一个签名的 NPU APK。本地转写适用于 SM8850、ARM64、4
 
 公开版包名为 `dev.soundsoftware.app.release`。已有公开版可以直接覆盖安装，保留原录音和设置。
 
+## Qwen3-ASR NPU 性能
+
+v0.1.8 单次可转写最长 24 秒音频。内置 Qwen3-ASR 0.6B 使用 INT8 投影权重，保留 151,936 个词表条目。64-token prefill 和逐 token 解码共享解码器权重及一份 1,024 槽 KV 缓冲。分组查询注意力（GQA）让每两个 query head 直接复用同一个 KV head，省去显式复制。
+
+在荣耀 Magic V6 上，相比最初显式复制 KV head 的 24 秒 INT8 导出版，去掉复制后，120 个有效历史位置下的 **AR1 整图从 191.03 降到 47.26 ms/token，耗时减少 75%，速度约为 4.04 倍**。计时包含 28 层解码和选词。同一段 24 秒音频，上一公开版的 8 秒 OnSpeak47 分三次识别耗时 **2.24 秒**，本版 24 秒 GQA 一次识别耗时 **4.36 秒**，均排除模型加载。24 秒输入能保留原 8 秒切点两侧的上下文。
+
 ## 从源码构建
 
 需要 JDK 17、Android SDK Platform 35 和仓库自带的 Gradle Wrapper。
