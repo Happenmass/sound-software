@@ -40,7 +40,6 @@
   <string name="assistant_intro">"从多条录音中查找答案，并附上原文出处。"</string>
   <string name="assistant_process">"思考与检索过程 · %1$s"</string>
   <string name="assistant_scope">"搜索 %1$s 条录音 · 只发送检索到的文字"</string>
-  <string name="assistant_short_intro">"跨录音查找、比较讨论、追踪待办"</string>
   <string name="audio_changed">"音频在计算期间已修改，请重试"</string>
   <string name="audio_duration_mismatch">"录音时长与设备清单不符，未保存不完整音频"</string>
   <string name="audio_export_failed">"音频导出失败：%1$s"</string>
@@ -95,7 +94,7 @@
   <string name="cloud_asr_not_configured">"云端转写服务尚未配置"</string>
   <string name="cloud_transcription_help">"仅在选择云端转写时，录音音频才会上传到你配置的服务。"</string>
   <string name="cloud_transcription_service">"云端转写服务"</string>
-  <string name="collapse">"收起 ∧"</string>
+  <string name="collapse">"收起"</string>
   <string name="compact_device_storage">"已用 %1$s / %2$s GB"</string>
   <string name="configure_notes_service">"配置纪要服务"</string>
   <string name="confirm_pairing_suffix">"\n确认绑定到这台手机"</string>
@@ -181,7 +180,7 @@
   <string name="enabled">"已开启"</string>
   <string name="enter_model_name">"请填写模型名称"</string>
   <string name="erase_and_reset">"清空并恢复"</string>
-  <string name="expand">"展开 ∨"</string>
+  <string name="expand">"展开"</string>
   <string name="export_and_share">"导出与分享"</string>
   <string name="export_document">"导出文档"</string>
   <string name="export_document_format">"导出 %1$s 文档"</string>
@@ -205,7 +204,7 @@
   <string name="generating_notes">"生成纪要中"</string>
   <string name="generating_notes_ellipsis">"正在生成纪要…"</string>
   <string name="go_to_sync">"去同步"</string>
-  <string name="hide_tool_details">"收起详情 ∧"</string>
+  <string name="hide_tool_details">"收起详情"</string>
   <string name="highlight_at">"重点 %1$s · %2$s  ›"</string>
   <string name="highlights_unsupported">"当前设备固件的重点格式尚未验证"</string>
   <string name="history_compacted">"较早对话已压缩，完整历史保存在本机。回答会重新核对原文。"</string>
@@ -299,7 +298,6 @@
   <string name="number_of_speakers">"人数"</string>
   <string name="old_pairing_missing_id">"旧绑定缺少设备标识，请重新添加录音豆"</string>
   <string name="open_ai_recorder">"AI 录音豆 ›"</string>
-  <string name="open_assistant">"录音助手  ›"</string>
   <string name="open_questions">"待确认问题"</string>
   <string name="open_recording">"打开录音 ›"</string>
   <string name="paired">"已绑定"</string>
@@ -395,7 +393,7 @@
   <string name="share_audio">"单独分享音频"</string>
   <string name="share_document">"分享文档"</string>
   <string name="share_examples">"微信、飞书、邮件等"</string>
-  <string name="show_tool_details">"查看参数与结果 ∨"</string>
+  <string name="show_tool_details">"工具详情"</string>
   <string name="skip_silence">"跳过静音"</string>
   <string name="source_audio_mismatch">"设备音频与本地版本不一致，未改动原录音"</string>
   <string name="source_changed">"来源已删除或修改，请重新查询"</string>

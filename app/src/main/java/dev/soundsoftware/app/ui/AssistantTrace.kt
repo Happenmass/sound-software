@@ -2,7 +2,9 @@ package dev.soundsoftware.app.ui
 
 import dev.soundsoftware.app.R
 import androidx.compose.ui.res.stringResource
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -10,6 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.soundsoftware.core.agent.AgentTraceStep
 import kotlinx.serialization.json.Json
@@ -28,12 +34,25 @@ internal fun AssistantTrace(trace: List<AgentTraceStep>, busy: Boolean = false, 
         else -> stringResource(R.string.processing_complete)
     }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.PageBg)) {
-        Row(Modifier.fillMaxWidth().tap {expanded=!expanded}.padding(14.dp),verticalAlignment=Alignment.CenterVertically) {
+        val toggleLabel = stringResource(if (expanded) R.string.collapse else R.string.expand)
+        Row(
+            Modifier.fillMaxWidth().tap { expanded = !expanded }
+                .semantics { onClick(label = toggleLabel, action = null) }.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                 T(stringResource(R.string.assistant_process, status),ts(13,500,if(busy) C.Blue else C.Ink2))
                 T(stringResource(R.string.tool_call_count, tools, duration(trace.sumOf {it.elapsedMs})),ts(12,400,C.Muted))
             }
-            T(if(expanded) stringResource(R.string.collapse) else stringResource(R.string.expand),ts(12,500,C.Blue))
+            Row(
+                Modifier.clip(RoundedCornerShape(10.dp)).background(C.Card).padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                T(toggleLabel, ts(12, 600, C.Ink2))
+                TraceChevron(expanded, C.Muted)
+            }
         }
         if(expanded) {
             Divider()
@@ -58,8 +77,21 @@ internal fun AssistantTrace(trace: List<AgentTraceStep>, busy: Boolean = false, 
             }
             if(step.detail.isNotBlank()) T(step.detail,ts(12,400,C.Muted,lineHeight=1.5f))
             step.usage?.let {T(stringResource(R.string.step_token_usage, it.promptTokens, it.completionTokens),ts(11,400,C.Muted))}
-            if(step.toolName!=null) {
-                T("${step.toolName} · ${if(details) stringResource(R.string.hide_tool_details) else stringResource(R.string.show_tool_details)}",ts(12,500,C.Blue),Modifier.tap {details=!details}.padding(vertical=4.dp))
+            step.toolName?.let { toolName ->
+                val label = stringResource(if (details) R.string.hide_tool_details else R.string.show_tool_details)
+                val shape = RoundedCornerShape(12.dp)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(shape)
+                        .background(if (details) C.Highlight else C.Card).border(1.dp, C.Line2, shape)
+                        .tap { details = !details }.semantics { onClick(label = label, action = null) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    T(toolName, ts(12, 500, C.Ink2), Modifier.weight(1f), maxLines = 1)
+                    T(label, ts(12, 600, C.Blue))
+                    TraceChevron(details, C.Blue)
+                }
                 if(details) SelectionContainer {
                     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         T(stringResource(R.string.arguments),ts(12,600,C.Ink2))
@@ -71,6 +103,12 @@ internal fun AssistantTrace(trace: List<AgentTraceStep>, busy: Boolean = false, 
             }
         }
     }
+}
+
+@Composable
+private fun TraceChevron(expanded: Boolean, color: Color) {
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "trace-chevron")
+    Ico(Icons.ChevronDown, 16.dp, color, Modifier.rotate(rotation))
 }
 
 private val traceJson=Json {prettyPrint=true}

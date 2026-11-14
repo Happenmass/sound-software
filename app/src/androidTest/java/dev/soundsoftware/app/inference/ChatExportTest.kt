@@ -32,10 +32,12 @@ class ChatExportTest {
         compose.onNodeWithText(context.getString(dev.soundsoftware.app.R.string.expand)).performClick()
         compose.onNodeWithText("搜索录音片段").assertIsDisplayed()
         compose.onNodeWithText("测试用原文片段",substring=true).assertDoesNotExist()
-        compose.onNodeWithText("search_recordings · ${context.getString(dev.soundsoftware.app.R.string.show_tool_details)}").performClick()
+        compose.onNodeWithText(context.getString(dev.soundsoftware.app.R.string.show_tool_details)).performClick()
         compose.onNodeWithText("测试用原文片段",substring=true).assertIsDisplayed()
         val screenshot=File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"chat-export-validation/process-expanded.png").apply {parentFile!!.mkdirs()}
         screenshot.outputStream().use {compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG,100,it)}
+        compose.onNodeWithText(context.getString(dev.soundsoftware.app.R.string.hide_tool_details)).performClick()
+        compose.onNodeWithText("测试用原文片段",substring=true).assertDoesNotExist()
         compose.onNodeWithText(context.getString(dev.soundsoftware.app.R.string.collapse)).performClick()
         compose.onNodeWithText("测试用原文片段",substring=true).assertDoesNotExist()
         val collapsed=File(screenshot.parentFile,"process-collapsed.png")

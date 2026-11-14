@@ -110,6 +110,8 @@ object Icons {
     val Share = icon("share", "M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6")
     val More = icon("more", circle(5f, 12f, 1.8f), circle(12f, 12f, 1.8f), circle(19f, 12f, 1.8f), filled = true)
     val Chevron = icon("chevron", "M9 6l6 6-6 6")
+    val ChevronDown = icon("chevronDown", "M6 9l6 6 6-6")
+    val Pi = icon("pi", "M3.5 8.5c.8-1 1.8-1.5 3.2-1.5H20M9 7c0 4.9-.6 8.1-2.6 11M15.7 7v8.2c0 2.8 2.2 3.4 4.1 2", stroke = 2.4f)
     val Check = icon("check", "M5 12.5l4.5 4.5L19 7.5", stroke = 3f)
     val Trash = icon("trash", "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13")
     val Wifi = icon("wifi", "M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0", circle(12f, 19.5f, 1f))

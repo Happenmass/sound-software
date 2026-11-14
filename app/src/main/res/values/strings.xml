@@ -40,7 +40,6 @@
   <string name="assistant_intro">"Find answers across recordings with links to the source transcript."</string>
   <string name="assistant_process">"Search and tool activity · %1$s"</string>
   <string name="assistant_scope">"Search %1$s recordings · Sends only retrieved text"</string>
-  <string name="assistant_short_intro">"Search across recordings, compare discussions and track to-dos"</string>
   <string name="audio_changed">"The audio changed during analysis. Try again."</string>
   <string name="audio_duration_mismatch">"Audio duration does not match the device list. The incomplete file was discarded."</string>
   <string name="audio_export_failed">"Audio export failed: %1$s"</string>
@@ -95,7 +94,7 @@
   <string name="cloud_asr_not_configured">"Set up the cloud transcription service first."</string>
   <string name="cloud_transcription_help">"Audio is uploaded to your configured service only when you choose cloud transcription."</string>
   <string name="cloud_transcription_service">"Cloud transcription service"</string>
-  <string name="collapse">"Collapse ∧"</string>
+  <string name="collapse">"Collapse"</string>
   <string name="compact_device_storage">"%1$s of %2$s GB used"</string>
   <string name="configure_notes_service">"Set up the notes service"</string>
   <string name="confirm_pairing_suffix">"\nConfirm pairing with this phone"</string>
@@ -181,7 +180,7 @@
   <string name="enabled">"On"</string>
   <string name="enter_model_name">"Enter the model name."</string>
   <string name="erase_and_reset">"Erase and reset"</string>
-  <string name="expand">"Expand ∨"</string>
+  <string name="expand">"Expand"</string>
   <string name="export_and_share">"Export and share"</string>
   <string name="export_document">"Export document"</string>
   <string name="export_document_format">"Export %1$s document"</string>
@@ -205,7 +204,7 @@
   <string name="generating_notes">"Generating notes"</string>
   <string name="generating_notes_ellipsis">"Generating notes…"</string>
   <string name="go_to_sync">"Go to sync"</string>
-  <string name="hide_tool_details">"Hide details ∧"</string>
+  <string name="hide_tool_details">"Hide details"</string>
   <string name="highlight_at">"Highlight %1$s · %2$s ›"</string>
   <string name="highlights_unsupported">"This firmware’s highlight format has not been verified."</string>
   <string name="history_compacted">"Earlier messages were summarized. Your full history is saved on this phone. The assistant checks the original text for each answer."</string>
@@ -299,7 +298,6 @@
   <string name="number_of_speakers">"Number of speakers"</string>
   <string name="old_pairing_missing_id">"The saved pairing is missing a device ID. Add the recorder again."</string>
   <string name="open_ai_recorder">"AI Recorder ›"</string>
-  <string name="open_assistant">"Recording Assistant ›"</string>
   <string name="open_questions">"Open questions"</string>
   <string name="open_recording">"Open recording ›"</string>
   <string name="paired">"Paired"</string>
@@ -395,7 +393,7 @@
   <string name="share_audio">"Share audio"</string>
   <string name="share_document">"Share document"</string>
   <string name="share_examples">"Messaging, email and more"</string>
-  <string name="show_tool_details">"Show arguments and results ∨"</string>
+  <string name="show_tool_details">"Tool details"</string>
   <string name="skip_silence">"Skip silence"</string>
   <string name="source_audio_mismatch">"Device audio differs from the local copy. Your recording was kept."</string>
   <string name="source_changed">"The source was deleted or changed. Search again."</string>

@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.ContentScale
@@ -64,23 +65,55 @@ fun MainScreen(vm: AppViewModel, onImport: () -> Unit, onRequestPermissions: () 
                 Tab.DEVICE -> DeviceScreen(vm, asTab = true, onRequestPermissions = onRequestPermissions) { overlay = it }
                 Tab.ME -> MeContent(vm, onImport)
             }
-            if (!(overlay && tab == Tab.DEVICE)) BottomNav(tab, vm::selectTab, Modifier.align(Alignment.BottomCenter))
+            if (!(overlay && tab == Tab.DEVICE)) {
+                BottomNav(tab, vm::selectTab, { vm.push(Screen.Assistant) }, Modifier.align(Alignment.BottomCenter))
+            }
         }
         if (sheet) DiscoverySheet(vm, device)
     }
 }
 
 @Composable
-private fun BottomNav(tab: Tab, onSelect: (Tab) -> Unit, modifier: Modifier) {
-    val items = listOf(Tab.RECORDINGS to (Icons.Wave to stringResource(R.string.recordings)), Tab.TODOS to (Icons.Todo to stringResource(R.string.todos)), Tab.DEVICE to (Icons.Bean to stringResource(R.string.device)), Tab.ME to (Icons.Person to stringResource(R.string.settings)))
-    Row(modifier.navigationBarsPadding().padding(bottom = 22.dp).width(310.dp).height(64.dp)
-        .shadow(16.dp, RoundedCornerShape(32.dp), ambientColor = Color(0x290C0D10), spotColor = Color(0x290C0D10))
-        .clip(RoundedCornerShape(32.dp)).background(Color(0xF2FFFFFF)).border(1.dp, Color(0xB3FFFFFF), RoundedCornerShape(32.dp)).padding(6.dp)) {
-        items.forEach { (t, v) ->
-            val selected = t == tab
-            Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(26.dp)).background(if (selected) C.Ink else Color.Transparent)
-                .tap(v.second) { onSelect(t) }, Alignment.Center) { Ico(v.first, 22.dp, if (selected) Color.White else C.Ink2) }
+private fun BottomNav(tab: Tab, onSelect: (Tab) -> Unit, onAssistant: () -> Unit, modifier: Modifier) {
+    val shape = RoundedCornerShape(32.dp)
+    Row(
+        modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 22.dp)
+            .width(340.dp).height(64.dp)
+            .shadow(16.dp, shape, ambientColor = Color(0x290C0D10), spotColor = Color(0x290C0D10))
+            .clip(shape).background(Color(0xF2FFFFFF)).border(1.dp, Color(0xB3FFFFFF), shape).padding(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        NavTab(Tab.RECORDINGS, tab, Icons.Wave, stringResource(R.string.recordings), onSelect)
+        NavTab(Tab.TODOS, tab, Icons.Todo, stringResource(R.string.todos), onSelect)
+        Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).background(C.Blue)
+                    .tap(stringResource(R.string.recording_assistant), onClick = onAssistant),
+                Alignment.Center,
+            ) {
+                Ico(Icons.Pi, 38.dp, Color.White)
+            }
         }
+        NavTab(Tab.DEVICE, tab, Icons.Bean, stringResource(R.string.device), onSelect)
+        NavTab(Tab.ME, tab, Icons.Person, stringResource(R.string.settings), onSelect)
+    }
+}
+
+@Composable
+private fun RowScope.NavTab(
+    item: Tab,
+    selectedTab: Tab,
+    icon: ImageVector,
+    label: String,
+    onSelect: (Tab) -> Unit,
+) {
+    val selected = item == selectedTab
+    Box(
+        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(26.dp))
+            .background(if (selected) C.Ink else Color.Transparent).tap(label) { onSelect(item) },
+        Alignment.Center,
+    ) {
+        Ico(icon, 22.dp, if (selected) Color.White else C.Ink2)
     }
 }
 
@@ -101,10 +134,6 @@ private fun HomeContent(vm: AppViewModel, onRequestPermissions: () -> Unit) {
             }
         }
         item { DeviceCard(vm, device, onRequestPermissions) }
-        item { Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White).tap(stringResource(R.string.recording_assistant)) { vm.push(Screen.Assistant) }.padding(18.dp)) {
-            T(stringResource(R.string.open_assistant), ts(18, 700))
-            T(stringResource(R.string.assistant_short_intro), ts(13, 400, C.Muted))
-        } }
         if (recordings.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(top = 48.dp, start = 32.dp, end = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 T(stringResource(R.string.no_recordings), ts(17, 700))
