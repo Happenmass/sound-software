@@ -284,7 +284,7 @@
   <string name="notes_failed">"纪要未生成：%1$s"</string>
   <string name="notes_ready">"纪要已就绪"</string>
   <string name="notes_service">"纪要服务"</string>
-  <string name="notes_service_help">"用于生成摘要、待办、章节与 AI 问答。兼容 OpenAI Chat Completions 接口，例如 https://api.example.com/v1。只发送逐字稿文字，不上传音频。"</string>
+  <string name="notes_service_help">"用于生成摘要、待办、章节与 AI 问答"</string>
   <string name="notes_service_privacy">"OpenAI 兼容接口 · 只发送逐字稿文字"</string>
   <string name="notes_setup_help">"配置纪要服务后，可根据逐字稿生成摘要、待办与章节。只发送文字，不上传音频。"</string>
   <string name="notes_stale">"逐字稿、说话人或重点标记已更新，这份纪要可能已过期；可重新生成。"</string>

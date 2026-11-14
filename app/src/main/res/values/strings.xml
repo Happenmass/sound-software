@@ -284,7 +284,7 @@
   <string name="notes_failed">"Notes could not be generated: %1$s"</string>
   <string name="notes_ready">"Notes ready"</string>
   <string name="notes_service">"Notes service"</string>
-  <string name="notes_service_help">"Generate summaries, action items and chapters, and ask questions. Use an OpenAI-compatible Chat Completions endpoint such as https://api.example.com/v1. Only transcript text is sent."</string>
+  <string name="notes_service_help">"Used to generate summaries, action items, and chapters, and to answer questions."</string>
   <string name="notes_service_privacy">"OpenAI-compatible API · Sends transcript text"</string>
   <string name="notes_setup_help">"Set up a notes service to generate summaries, action items and chapters. Only transcript text is sent."</string>
   <string name="notes_stale">"The transcript, speakers or highlights have changed. Regenerate the notes to update them."</string>
