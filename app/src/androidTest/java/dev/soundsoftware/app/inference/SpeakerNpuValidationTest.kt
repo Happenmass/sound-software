@@ -106,9 +106,13 @@ class SpeakerNpuValidationTest {
         enabled();val wav=PcmWav.open(File(root,"single.wav"));val directory=File(app.modelDir,"diarization")
         val expected=withContext(Dispatchers.Default){SherpaDiarizer(directory,4).analyze(wav,null){}}
         val production=withContext(Dispatchers.Default){SherpaDiarizer.forDevice(base,directory).analyze(wav,null){}}
-        assertEquals("cpu-reference",production.backend);assertEquals(expected.turns,production.turns);assertEquals(expected.warnings,production.warnings)
+        val hasHtp=dev.soundsoftware.app.BuildConfig.SPEAKER_NPU_ENABLED &&
+            SpeakerNpuRuntime(base,File(app.modelDir,SpeakerNpuRuntime.MODEL_DIRECTORY),directory).isReady
+        assertEquals(if(hasHtp)"qnn-htp-hybrid" else "cpu-reference",production.backend)
+        if(hasHtp)assertEquals(1,production.npu?.cleanTurnExecutions)
+        assertEquals(expected.turns,production.turns);assertEquals(expected.warnings,production.warnings)
         val longResult=withContext(Dispatchers.Default){SherpaDiarizer.forDevice(base,directory).analyze(PcmWav.open(File(root,"dialog.wav")),2){}}
-        assertEquals(if(File(app.modelDir,"diarization-npu/eres2netv2-masked.bin").isFile && dev.soundsoftware.app.BuildConfig.SPEAKER_NPU_ENABLED)"qnn-htp-hybrid" else "cpu-parallel",longResult.backend);assertEquals(2,longResult.turns.map{it.speaker}.distinct().size)
+        assertEquals(if(hasHtp)"qnn-htp-hybrid" else "cpu-parallel",longResult.backend);assertEquals(2,longResult.turns.map{it.speaker}.distinct().size)
         assertTrue(longResult.warnings.none{it.startsWith("并行说话人")})
         val broken=SpeakerWorkerConfig(File("/system/bin/false"),File(base.applicationInfo.nativeLibraryDir))
         assertTrue(broken.executable.canExecute())

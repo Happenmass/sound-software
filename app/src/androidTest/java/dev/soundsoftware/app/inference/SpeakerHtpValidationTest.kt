@@ -32,7 +32,7 @@ class SpeakerHtpValidationTest {
     private fun configuration(npu:Boolean,validate:Boolean=false):SpeakerWorkerConfig {
         val native=File(context.applicationInfo.nativeLibraryDir)
         return SpeakerWorkerConfig(File(native,if(npu)"libsound_speaker_npu_worker.so" else "libsound_speaker_worker.so"),native,4,1,diagnostics=true,
-            npu=if(npu)SpeakerNpuRuntime(context,File(app.modelDir,"diarization-npu"),File(app.modelDir,"diarization")) else null,validateNpu=validate)
+            npu=if(npu)SpeakerNpuRuntime(context,File(app.modelDir,SpeakerNpuRuntime.MODEL_DIRECTORY),File(app.modelDir,"diarization")) else null,validateNpu=validate)
     }
     private suspend fun analyze(file:File,count:Int?,npu:Boolean,validate:Boolean=false)=withContext(Dispatchers.Default){SherpaDiarizer(File(app.modelDir,"diarization"),4,configuration(npu,validate)).analyze(PcmWav.open(file),count){}}
     private fun row(file:File,count:Int?,mode:String,result:DiarizationAnalysis,elapsed:Long,thermalBefore:Int):JSONObject {
@@ -42,7 +42,7 @@ class SpeakerHtpValidationTest {
             .put("elapsedMs",elapsed).put("speakers",result.turns.map{it.speaker}.filter{it>=0}.distinct().size).put("turns",turns).put("warnings",JSONArray(result.warnings))
             .put("nativeMs",t.nativeMs).put("loadMs",t.loadMs).put("extraEmbeddingMs",t.extraEmbeddingMs)
             .put("thermalBefore",thermalBefore).put("thermalAfter",context.getSystemService(PowerManager::class.java).currentThermalStatus).apply {
-                result.npu?.let {put("htpExecutions",it.htpExecutions).put("validatedEmbeddings",it.validated).put("minEmbeddingCosine",it.minCosine).put("maxEmbeddingAbsError",it.maxAbsError).put("burst",it.burst)}
+                result.npu?.let {put("htpExecutions",it.htpExecutions).put("htpEmbeddings",it.embeddings).put("cleanTurnHtpExecutions",it.cleanTurnExecutions).put("validatedEmbeddings",it.validated).put("minEmbeddingCosine",it.minCosine).put("maxEmbeddingAbsError",it.maxAbsError).put("burst",it.burst)}
             }
     }
     @Test fun numericQualityAndOneTwoThreeSpeakerControls()=runBlocking {
@@ -56,7 +56,7 @@ class SpeakerHtpValidationTest {
                 assertEquals(if(mode=="cpu")"cpu-parallel" else if(result.npu?.htpExecutions==0)"cpu-no-embedding" else "qnn-htp-hybrid",result.backend)
                 assertEquals(expected,result.turns.map{it.speaker}.filter{it>=0}.distinct().size)
                 assertTrue(result.warnings.none{it.startsWith("NPU") || it.startsWith("并行说话人")})
-                if(mode!="cpu"){val proof=result.npu!!;if(name!="single.wav")assertTrue(proof.htpExecutions>0);assertEquals(proof.htpExecutions,proof.validated);assertTrue(proof.minCosine>=.9999);assertTrue(proof.burst)}
+                if(mode!="cpu"){val proof=result.npu!!;if(name!="single.wav")assertTrue(proof.htpExecutions>0);assertEquals(proof.embeddings,proof.validated);assertTrue(proof.minCosine>=.9999);if(proof.htpExecutions>0)assertTrue(proof.burst)}
             }
             val exact=canonical(results.getValue("cpu").turns)==canonical(results.getValue("npu-validated").turns)
             report.put("lastPairExact",exact);output.writeText(report.toString(2));assertTrue("Every boundary and assignment must match: $name / $count",exact)
@@ -74,7 +74,7 @@ class SpeakerHtpValidationTest {
                 val result=analyze(file,count,mode=="npu");results[mode]=result
                 report.getJSONArray("rows").put(row(file,count,mode,result,SystemClock.elapsedRealtime()-start,thermal).put("repetition",rep));output.writeText(report.toString(2))
                 assertEquals(if(mode=="cpu")"cpu-parallel" else "qnn-htp-hybrid",result.backend);assertEquals(2,result.turns.map{it.speaker}.filter{it>=0}.distinct().size)
-                if(mode=="npu"){assertTrue(result.npu!!.htpExecutions>0);assertEquals(0,result.npu!!.validated);assertTrue(result.npu!!.burst)}
+                if(mode=="npu"){assertTrue(result.npu!!.htpExecutions>0);assertEquals(0,result.npu!!.validated);assertTrue(result.npu!!.burst);if(count==null)assertTrue(result.npu!!.cleanTurnExecutions>0) else assertEquals(0,result.npu!!.cleanTurnExecutions)}
             }
             val exact=canonical(results.getValue("cpu").turns)==canonical(results.getValue("npu").turns)
             report.put("lastPairExact",exact);output.writeText(report.toString(2));assertTrue(exact);assertEquals(results.getValue("cpu").warnings,results.getValue("npu").warnings)
