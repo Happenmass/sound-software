@@ -72,7 +72,8 @@ class LocalAsrAdapterTest {
             SpeakerTurn(11_000, 20_000, 4),
             SpeakerTurn(20_500, 28_000, 4),
             SpeakerTurn(28_500, 44_500, 4),
-            SpeakerTurn(46_000, 47_000, 4),
+            SpeakerTurn(46_000, 46_300, 4),
+            SpeakerTurn(46_500, 47_000, 4),
             SpeakerTurn(47_000, 48_000, 9),
         )).transcribe(request(48_000))
 
@@ -81,7 +82,7 @@ class LocalAsrAdapterTest {
         assertEquals(listOf(0L, 46_000L, 47_000L), result.segments.map { it.startMs })
         assertEquals(listOf(44_500L, 47_000L, 48_000L), result.segments.map { it.endMs })
         assertEquals(listOf("spk-4", "spk-4", "spk-9"), result.segments.map { it.speaker })
-        assertEquals(listOf(2, 0, 0), result.segments.map { it.fragments.size })
+        assertEquals(listOf(2, 1, 0), result.segments.map { it.fragments.size })
     }
 
     @Test fun splitsAnOverlongTurnAndPacksItsTailWithTheNextTurn() = runBlocking {

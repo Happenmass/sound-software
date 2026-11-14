@@ -49,7 +49,10 @@ class LocalAsrAdapter(
             val batches = if (groups.isEmpty()) {
                 splitSpeechRanges(vad.detect(wav), runtime.maxSamples).map { RecognitionBatch(listOf(it)) }
             } else groups.map { group ->
-                RecognitionBatch(packSpeakerWindows(group, wav.sampleRate, runtime.maxSamples), group.first().speaker)
+                RecognitionBatch(
+                    packSpeakerWindows(group, wav.sampleRate, runtime.maxSamples), group.first().speaker,
+                    joinedSpeech = group.size > 1,
+                )
             }
             val key = checkpointKey(request, descriptor) + "|$inputPlan|${runtime.maxSamples}"
             val segments = mutableListOf<TranscriptSegment>()
@@ -78,7 +81,7 @@ class LocalAsrAdapter(
                         "part-$index", recognized.joinToString(" "), batch.windows.first().startSample * 1000 / wav.sampleRate,
                         batch.windows.last().endSample * 1000 / wav.sampleRate,
                         batch.speaker?.takeIf { it >= 0 }?.let { "spk-$it" },
-                        fragments = if (recognized.size > 1) recognized else emptyList(),
+                        fragments = if (batch.joinedSpeech || batch.windows.size > 1) recognized else emptyList(),
                     )
                 }
             }
@@ -97,7 +100,11 @@ class LocalAsrAdapter(
     override fun close() { runtime.close() }
 }
 
-private data class RecognitionBatch(val windows: List<SpeechRange>, val speaker: Int? = null)
+private data class RecognitionBatch(
+    val windows: List<SpeechRange>,
+    val speaker: Int? = null,
+    val joinedSpeech: Boolean = false,
+)
 
 /** Pack a continuous speaker group in order, keeping each speech range intact when it fits. */
 private fun packSpeakerWindows(turns: List<SpeakerTurn>, sampleRate: Int, maxSamples: Int): List<SpeechRange> {

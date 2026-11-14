@@ -113,10 +113,11 @@ class QwenHtpPhoneTest {
         val previous = settings.state.value.llm
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val duration = PcmWav.open(fixture).durationMs
+        var turns = listOf(SpeakerTurn(0, duration, 7))
         val diarizer = object : SpeakerAnalyzer {
             override val isReady = true
             override suspend fun analyze(wav: PcmWav, speakerCount: Int?, onProgress: (Float) -> Unit) =
-                DiarizationAnalysis(listOf(SpeakerTurn(0, duration, 7)))
+                DiarizationAnalysis(turns)
         }
         val processor = Processor(repository, settings, app.modelDir, File(root, "checkpoints"), scope,
             diarizer = diarizer, qwenHtpFiles = QwenHtpFiles(app, app.modelDir)) {}
@@ -157,6 +158,14 @@ class QwenHtpPhoneTest {
                 val fallback = checkNotNull(transcribe().transcript)
                 assertEquals(raw, fallback.segments.single())
                 assertTrue(fallback.warnings.contains(context.getString(dev.soundsoftware.app.R.string.repair_transcript_failed)))
+
+                // Both speech ranges fit into one ASR call, but their combined text still gets proofread.
+                turns = listOf(SpeakerTurn(0, 10_000, 7), SpeakerTurn(11_000, 20_000, 7))
+                server.enqueue(MockResponse().setBody("""{"choices":[{"finish_reason":"stop","message":$message}]}"""))
+                val joined = checkNotNull(transcribe().transcript).segments.single()
+                assertEquals(corrected, joined.text)
+                assertEquals(20_000L, joined.endMs)
+                assertEquals(3, server.requestCount)
             }
         } finally {
             scope.coroutineContext.job.cancelAndJoin()

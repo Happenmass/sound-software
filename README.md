@@ -37,7 +37,7 @@ On the HONOR Magic V6, a 44.969-second two-speaker sample took **4.276 s** to an
 
 ## Transcript continuity
 
-On-device transcription groups consecutive speech from each identified speaker into passages of up to five minutes. Each Qwen3-ASR inference uses at most 24 seconds of audio, including short pauses. The app packs consecutive speech ranges in order and splits a range only if it exceeds that limit on its own. With LLM proofreading enabled, the configured notes service receives the ordered text fragments for a passage. The app keeps its speaker and time range. If proofreading fails, unprocessed passages retain the recognized text.
+On-device transcription groups consecutive speech from each identified speaker into passages of up to five minutes. Each Qwen3-ASR inference uses at most 24 seconds of audio, including short pauses. The app packs consecutive speech ranges in order and splits a range only if it exceeds that limit on its own. With LLM proofreading enabled, the notes service receives the text of same-speaker passages that combine multiple speech ranges or span multiple inference windows. The app keeps its speaker and time range. If proofreading fails, unprocessed passages retain the recognized text.
 
 ## Build from source
 

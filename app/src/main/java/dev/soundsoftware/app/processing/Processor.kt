@@ -154,12 +154,12 @@ class Processor(
             val base = if (turns != null) 0.25f else 0f
             progress(id, ProcessingStage.TRANSCRIBING, base, settings.text(R.string.transcribing))
             val result = recognize(id, options, turns, base)
-            val repairCount = if (repair == null) 0 else result.segments.count { it.speaker != null && it.fragments.size > 1 }
+            val repairCount = if (repair == null) 0 else result.segments.count { it.speaker != null && it.fragments.isNotEmpty() }
             var repaired = 0
             var repairFailed = false
             val recognized = result.segments.map { segment ->
                 var text = segment.text
-                if (repair != null && !repairFailed && segment.speaker != null && segment.fragments.size > 1) {
+                if (repair != null && !repairFailed && segment.speaker != null && segment.fragments.isNotEmpty()) {
                     repaired++
                     progress(id, ProcessingStage.TRANSCRIBING, null, settings.text(R.string.repairing_transcript, repaired, repairCount))
                     try {
