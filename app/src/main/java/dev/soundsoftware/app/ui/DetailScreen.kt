@@ -362,8 +362,14 @@ private fun TranscriptTab(vm: AppViewModel, r: Recording, position: Long, playin
             T(stringResource(R.string.speaker_htp, speakerHtpExecutions), ts(12, 600, C.Teal),
                 Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
         }
-        if (r.transcript?.warnings?.isNotEmpty() == true) {
-            T(r.transcript!!.warnings.first(), ts(12, 400, C.Muted), Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
+        r.transcript?.warnings?.firstOrNull()?.let { warning ->
+            // Apply the same wording to warnings stored in earlier versions.
+            val message = if (warning.startsWith("部分短应答或噪声")) {
+                stringResource(R.string.speaker_unassigned_segments)
+            } else {
+                warning
+            }
+            T(message, ts(12, 400, C.Muted), Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
         }
         LazyColumn(state = list, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             if (segments.isEmpty()) item { T(if (query.isNotBlank()) stringResource(R.string.no_matches) else stringResource(R.string.empty_transcript), ts(14, 400, C.Muted)) }

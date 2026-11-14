@@ -37,7 +37,7 @@
   <string name="qwen_htp_hotwords_help">"Qwen3-ASR NPU uses these terms only to help generate notes."</string>
   <string name="assistant_config_required">"Set up the notes service with a model that supports tool calls."</string>
   <string name="assistant_failed">"The recording assistant failed. Try again."</string>
-  <string name="assistant_intro">"The assistant searches recordings and cites the original text. Ask about dates or people, or compare different meetings."</string>
+  <string name="assistant_intro">"Find answers across recordings with links to the source transcript."</string>
   <string name="assistant_process">"Search and tool activity · %1$s"</string>
   <string name="assistant_scope">"Search %1$s recordings · Sends only retrieved text"</string>
   <string name="assistant_short_intro">"Search across recordings, compare discussions and track to-dos"</string>
@@ -66,7 +66,7 @@
   <string name="bluetooth">"Bluetooth"</string>
   <string name="bluetooth_not_restored">"Bluetooth did not reconnect. Wake the recorder and try again."</string>
   <string name="bluetooth_permission_required">"Allow nearby devices to find and connect to the recorder."</string>
-  <string name="bluetooth_sync_help">"Keep the recorder close to your phone. Choose Wi-Fi for large batches."</string>
+  <string name="bluetooth_sync_help">"Keep the recorder close to your phone during sync."</string>
   <string name="bluetooth_unavailable">"Bluetooth is unavailable."</string>
   <string name="both_lights_off">"Both off"</string>
   <string name="both_lights_on">"Recorder and case on"</string>
@@ -93,7 +93,7 @@
   <string name="clear_history">"Clear history"</string>
   <string name="close">"Close"</string>
   <string name="cloud_asr_not_configured">"Set up the cloud transcription service first."</string>
-  <string name="cloud_transcription_help">"Audio is uploaded to this address when you select Cloud API for a recording. Local transcription uses the on-device model."</string>
+  <string name="cloud_transcription_help">"Audio is uploaded to your configured service only when you choose cloud transcription."</string>
   <string name="cloud_transcription_service">"Cloud transcription service"</string>
   <string name="collapse">"Collapse ∧"</string>
   <string name="compact_device_storage">"%1$s of %2$s GB used"</string>
@@ -286,12 +286,12 @@
   <string name="notes_service">"Notes service"</string>
   <string name="notes_service_help">"Used to generate summaries, action items, and chapters, and to answer questions."</string>
   <string name="repair_transcript">"LLM proofreading"</string>
-  <string name="repair_transcript_help">"Send consecutive on-device transcript fragments from the same speaker to this service to join cut-off sentences and fix clear errors. Applies to new and repeated transcriptions."</string>
+  <string name="repair_transcript_help">"Proofreads and combines consecutive transcript segments from the same speaker into one passage."</string>
   <string name="repairing_transcript">"Proofreading transcript %1$d/%2$d"</string>
   <string name="repair_transcript_failed">"LLM proofreading was interrupted. Unprocessed paragraphs retain the original transcript."</string>
   <string name="repair_transcript_needs_service">"Enter the notes service URL and model before enabling LLM proofreading."</string>
   <string name="notes_service_privacy">"OpenAI-compatible API · Sends transcript text"</string>
-  <string name="notes_setup_help">"Set up a notes service to generate summaries, action items and chapters. Only transcript text is sent."</string>
+  <string name="notes_setup_help">"Set up the notes service to turn transcripts into summaries, action items, and chapters. It receives only text."</string>
   <string name="notes_stale">"The transcript, speakers or highlights have changed. Regenerate the notes to update them."</string>
   <string name="notes_template">"Notes template"</string>
   <string name="notes_unconfigured_hint">"Set up the notes service to generate notes after transcription."</string>
@@ -328,13 +328,13 @@
   <string name="queued">"Queued"</string>
   <string name="qwen_language_help">"Qwen3-ASR detects the language automatically"</string>
   <string name="read_highlights">"Read device highlights"</string>
-  <string name="read_highlights_help">"Reading highlights transfers the original recording again. Use Wi-Fi for longer recordings. Your audio, transcript and notes are kept."</string>
+  <string name="read_highlights_help">"Reading highlights transfers the recording again. Use Wi-Fi for long recordings. Existing audio, transcripts, and notes are kept."</string>
   <string name="read_only_suffix">" · Read only"</string>
   <string name="read_over_bluetooth">"Read over Bluetooth"</string>
   <string name="read_over_wifi">"Read over Wi-Fi"</string>
   <string name="reading_highlights">"Reading device highlights…"</string>
   <string name="reading_recordings">"Reading device recordings…"</string>
-  <string name="reanalyze_explanation">"This updates speaker assignments and keeps the transcript text, times, title and notes. Review speaker names that could not be matched and regenerate any out-of-date notes."</string>
+  <string name="reanalyze_explanation">"Reassign speakers while keeping the transcript text, timestamps, and notes. Some speaker names may need review."</string>
   <string name="recalculate_speakers">"Reanalyze speakers"</string>
   <string name="recent_names">"Recent names:"</string>
   <string name="recognition">"Recognition"</string>
@@ -402,6 +402,7 @@
   <string name="source_text">"Source text"</string>
   <string name="source_with_time">"Source · %1$s"</string>
   <string name="speaker_analysis_failed">"Speaker diarization failed: %1$s"</string>
+  <string name="speaker_unassigned_segments">"The speaker could not be identified in some segments."</string>
   <string name="speaker_count">"%1$d speakers"</string>
   <string name="speaker_diarization">"Speaker diarization"</string>
   <string name="speaker_model_storage_low">Free up storage to prepare the built-in speaker models, then retry.</string>
@@ -535,7 +536,7 @@
   <string name="wifi_os_required">"Wi-Fi transfer requires Android 10 or newer."</string>
   <string name="wifi_permission_required">"Allow nearby devices or location to connect to the recorder hotspot. You can also sync over Bluetooth."</string>
   <string name="wifi_permissions_missing">"Allow nearby devices or location for Wi-Fi transfer."</string>
-  <string name="wifi_sync_help">"Connect to the recorder hotspot for fast batch transfers. Your current Wi-Fi may disconnect briefly. Bluetooth reconnects after syncing or canceling. Keep the recorder charged."</string>
+  <string name="wifi_sync_help">"Fast transfer may briefly disconnect your phone from its current Wi-Fi network. Keep the recorder charged."</string>
   <string name="wifi_transfer">"Wi-Fi transfer"</string>
   <string name="wifi_transfer_connected">"Connected for Wi-Fi transfer"</string>
   <string name="wifi_unsupported_phone">"This phone does not support Wi-Fi transfer. Use Bluetooth."</string>

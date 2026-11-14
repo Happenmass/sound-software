@@ -37,7 +37,7 @@
   <string name="qwen_htp_hotwords_help">"Qwen3-ASR NPU 仅在生成纪要时使用这些术语。"</string>
   <string name="assistant_config_required">"请先配置纪要服务，模型需要支持工具调用"</string>
   <string name="assistant_failed">"录音助手查询失败，请重试"</string>
-  <string name="assistant_intro">"助手会先查目录和原文，再给出带来源的回答。可以指定日期、人名，也可以比较不同会议。"</string>
+  <string name="assistant_intro">"从多条录音中查找答案，并附上原文出处。"</string>
   <string name="assistant_process">"思考与检索过程 · %1$s"</string>
   <string name="assistant_scope">"搜索 %1$s 条录音 · 只发送检索到的文字"</string>
   <string name="assistant_short_intro">"跨录音查找、比较讨论、追踪待办"</string>
@@ -66,7 +66,7 @@
   <string name="bluetooth">"蓝牙"</string>
   <string name="bluetooth_not_restored">"蓝牙尚未恢复，请唤醒录音豆后重新连接"</string>
   <string name="bluetooth_permission_required">"需要「附近的设备」权限才能发现和连接录音豆"</string>
-  <string name="bluetooth_sync_help">"录音通过蓝牙传输，请让录音豆靠近手机。大批量录音可选择 Wi-Fi 快传。"</string>
+  <string name="bluetooth_sync_help">"同步时请让录音豆靠近手机。"</string>
   <string name="bluetooth_unavailable">"蓝牙不可用"</string>
   <string name="both_lights_off">"均已关闭"</string>
   <string name="both_lights_on">"录音豆、充电舱均开启"</string>
@@ -93,7 +93,7 @@
   <string name="clear_history">"清空历史"</string>
   <string name="close">"关闭"</string>
   <string name="cloud_asr_not_configured">"云端转写服务尚未配置"</string>
-  <string name="cloud_transcription_help">"录音音频会上传到这个地址。仅在你为某条录音选择「云端 API」时使用；本地转写失败不会自动改用云端。"</string>
+  <string name="cloud_transcription_help">"仅在选择云端转写时，录音音频才会上传到你配置的服务。"</string>
   <string name="cloud_transcription_service">"云端转写服务"</string>
   <string name="collapse">"收起 ∧"</string>
   <string name="compact_device_storage">"已用 %1$s / %2$s GB"</string>
@@ -286,12 +286,12 @@
   <string name="notes_service">"纪要服务"</string>
   <string name="notes_service_help">"用于生成摘要、待办、章节与 AI 问答"</string>
   <string name="repair_transcript">"LLM 精校"</string>
-  <string name="repair_transcript_help">"将同一说话人的连续本地转写文本发给此服务，接续跨窗断句并修正明显错字。适用于新转写或重新转写。"</string>
+  <string name="repair_transcript_help">"它用于重新校对连续的说话人片段，并将其整合成一段话。"</string>
   <string name="repairing_transcript">"正在精校逐字稿 %1$d/%2$d"</string>
   <string name="repair_transcript_failed">"LLM 精校未完成，未精校的段落保留识别原文。"</string>
   <string name="repair_transcript_needs_service">"启用 LLM 精校前，请填写纪要服务地址和模型。"</string>
   <string name="notes_service_privacy">"OpenAI 兼容接口 · 只发送逐字稿文字"</string>
-  <string name="notes_setup_help">"配置纪要服务后，可根据逐字稿生成摘要、待办与章节。只发送文字，不上传音频。"</string>
+  <string name="notes_setup_help">"配置纪要服务后，可用逐字稿生成摘要、待办和章节。服务只接收文字。"</string>
   <string name="notes_stale">"逐字稿、说话人或重点标记已更新，这份纪要可能已过期；可重新生成。"</string>
   <string name="notes_template">"纪要类型"</string>
   <string name="notes_unconfigured_hint">"纪要服务尚未配置，转写完成后只生成逐字稿。"</string>
@@ -328,13 +328,13 @@
   <string name="queued">"排队中"</string>
   <string name="qwen_language_help">"Qwen3-ASR 自动识别语言"</string>
   <string name="read_highlights">"读取设备重点"</string>
-  <string name="read_highlights_help">"补读需要传输一次原录音，长录音建议使用 Wi-Fi。现有音频、逐字稿和纪要会保留。"</string>
+  <string name="read_highlights_help">"读取重点需重新传输录音，长录音建议用 Wi-Fi。已有音频、逐字稿和纪要会保留。"</string>
   <string name="read_only_suffix">" · 仅可查看"</string>
   <string name="read_over_bluetooth">"蓝牙读取"</string>
   <string name="read_over_wifi">"Wi-Fi 快传读取"</string>
   <string name="reading_highlights">"正在读取设备重点…"</string>
   <string name="reading_recordings">"读取设备录音…"</string>
-  <string name="reanalyze_explanation">"保留逐字稿文字、时间、标题和纪要。仅更新人物归属；无法可靠对应的旧命名需重新确认，旧纪要会提示来源已变更。"</string>
+  <string name="reanalyze_explanation">"重新识别每段话的说话人，保留原文、时间和纪要。部分说话人名称可能需要重新确认。"</string>
   <string name="recalculate_speakers">"重新计算说话人"</string>
   <string name="recent_names">"常用："</string>
   <string name="recognition">"识别"</string>
@@ -402,6 +402,7 @@
   <string name="source_text">"原文"</string>
   <string name="source_with_time">"原文 · %1$s"</string>
   <string name="speaker_analysis_failed">"说话人分离未完成：%1$s"</string>
+  <string name="speaker_unassigned_segments">"部分片段未能确认说话人。"</string>
   <string name="speaker_count">"%1$d 位说话人"</string>
   <string name="speaker_diarization">"说话人分离"</string>
   <string name="speaker_model_storage_low">存储空间不足，腾出空间后可重试准备内置说话人模型。</string>
@@ -535,7 +536,7 @@
   <string name="wifi_os_required">"Wi-Fi 快传需要 Android 10 或更高版本"</string>
   <string name="wifi_permission_required">"需要附近设备或位置权限才能连接录音豆热点，可选择蓝牙同步"</string>
   <string name="wifi_permissions_missing">"请先允许 Wi-Fi 快传所需的附近设备或位置权限"</string>
-  <string name="wifi_sync_help">"连接录音豆热点后批量快传，可能暂时断开当前 Wi-Fi；完成或取消后恢复蓝牙。请保持录音豆电量充足。"</string>
+  <string name="wifi_sync_help">"快传时，手机可能暂时断开当前 Wi-Fi。请保持录音豆电量充足。"</string>
   <string name="wifi_transfer">"Wi-Fi 快传"</string>
   <string name="wifi_transfer_connected">"Wi-Fi 快传已连接"</string>
   <string name="wifi_unsupported_phone">"此手机暂不支持 Wi-Fi 快传，请使用蓝牙同步"</string>
