@@ -16,12 +16,12 @@ Download the signed APK from [Releases](https://github.com/Happenmass/sound-soft
 
 1. Open the app. In **Device**, find and pair a recorder, or use **Settings → Import audio file**.
 2. For local transcription, select Qwen3-ASR under **Settings → Default transcription settings**. The app prepares the model on first use.
-3. To generate notes or use the assistant, configure an HTTPS endpoint and model in **Settings → Notes service**. The assistant requires a model that supports tool calls.
+3. Configure an HTTPS endpoint and model in **Settings → Notes service**. For the recording assistant, use a model that supports tool calls and tap the floating **Ai** button at the bottom. Expand a tool call to see its arguments and results.
 4. Enable **LLM proofreading** in the same settings to send consecutive transcript fragments from the same speaker to the configured service. It can join sentences split across recognition windows and correct clear recognition errors. The setting starts off and applies when you transcribe or retranscribe a recording.
 
 The release provides one signed NPU APK. Local transcription targets ARM64 SM8850 phones with 4 KB memory pages and has been verified on the HONOR Magic V6. The app lists compatible models and their installation status under **Settings → Local models**. See the [model guide](docs/MODELS.md#transcription-models) for storage and build details.
 
-The public package ID is `dev.soundsoftware.app.release`. Install the new APK over the previous public APK to retain its recordings and settings.
+The public package ID is `dev.soundsoftware.app.release`. Updating over the previous public APK preserves your recordings, settings, and saved API keys. When editing an existing service, leave the API Key field blank to keep the saved key.
 
 ## Qwen3-ASR NPU performance
 

@@ -16,12 +16,12 @@
 
 1. 打开 App，在「设备」中配对录音豆，或在「我的」中导入音频。
 2. 在「我的 → 默认转写设置」选择 Qwen3-ASR，首次使用时 App 自动准备模型。
-3. 使用纪要或录音助手前，在「我的 → 纪要服务」配置兼容 OpenAI Chat Completions 的 HTTPS 接口和模型。录音助手要求模型支持工具调用。
+3. 在「我的 → 纪要服务」配置兼容 OpenAI Chat Completions 的 HTTPS 接口和模型。录音助手需要支持工具调用的模型，点底部悬浮的 **Ai** 按钮即可进入。展开工具详情可查看参数和结果。
 4. 在同一页开启「LLM 精校」，可将同一说话人的连续转写文本发给已配置的服务，接续跨窗断句并修正明显错字。此项默认关闭，新转写或重新转写时生效。
 
 Release 提供一个签名的 NPU APK。本地转写适用于 SM8850、ARM64、4 KB 内存页设备，已在荣耀 Magic V6 验证。「我的 → 本地模型」显示兼容模型及安装状态。存储与构建说明见[配置文档](docs/MODELS.md#transcription-models)。
 
-公开版包名为 `dev.soundsoftware.app.release`。已有公开版可以直接覆盖安装，保留原录音和设置。
+公开版包名为 `dev.soundsoftware.app.release`。覆盖安装会保留录音、设置和已保存的 API Key。修改已有服务配置时，API Key 留空即可保留原值。
 
 ## Qwen3-ASR NPU 性能
 
