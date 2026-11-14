@@ -1,24 +1,35 @@
 package dev.soundsoftware.app.inference
 
 import android.content.Context
+import dev.soundsoftware.app.R
 import dev.soundsoftware.core.audio.sha256
 import java.io.File
 import java.util.zip.ZipInputStream
 import org.json.JSONObject
 
 /** Separate runtime directory: speaker QAIRT 2.50 never replaces ASR's validated 2.40 libraries. */
-class SpeakerNpuRuntime(context:Context,val modelDir:File,private val originalModels:File) {
+class SpeakerNpuRuntime(context:Context,private val modelDir:File,private val originalModels:File,
+    useBundled:Boolean=false) {
     private val context=context.applicationContext
     val runtimeDir=File(this.context.codeCacheDir,"speaker-qnn-2.50-v1")
     private val manifest by lazy {JSONObject(this.context.assets.open("speaker-npu-manifest.json").bufferedReader().use{it.readText()})}
-    val isReady get()=listOf("eres2netv2-masked.bin","embedding-head.onnx").all{File(modelDir,it).isFile} &&
+    private val bundled=BundledModel(context,modelDir,"speaker-models",useBundled,
+        R.string.speaker_model_storage_low,R.string.speaker_model_unpack_failed,verifyExternal=true)
+    val isReady get()=(bundled.available ||
+        listOf("eres2netv2-masked.bin","embedding-head.onnx").all{File(modelDir,it).isFile}) &&
         runCatching {
             val models=manifest.getJSONArray("validatedDeviceModels")
             (0 until models.length()).any{models.getString(it)==android.os.Build.MODEL}
         }.getOrDefault(false)
-    fun prepare()=synchronized(lock) {
+    suspend fun prepare():File {
+        val readyModels=bundled.prepare()
+        prepareRuntime(readyModels)
+        return readyModels
+    }
+
+    private fun prepareRuntime(readyModels:File)=synchronized(lock) {
         val models=manifest.getJSONObject("models")
-        for(name in models.keys())check(File(modelDir,name).sha256()==models.getJSONObject(name).getString("sha256")){"NPU说话人模型与运行库不匹配"}
+        for(name in models.keys())check(File(readyModels,name).sha256()==models.getJSONObject(name).getString("sha256")){"NPU说话人模型与运行库不匹配"}
         val original=manifest.getJSONObject("originalModels")
         for(name in original.keys())check(File(originalModels,name).sha256()==original.getString(name)){"当前说话人模型不匹配NPU产物"}
         val libraries=manifest.getJSONObject("libraries")

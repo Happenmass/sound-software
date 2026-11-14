@@ -7,6 +7,8 @@ import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
+import dev.soundsoftware.app.BuildConfig
+import dev.soundsoftware.app.R
 import dev.soundsoftware.core.audio.PcmWav
 import dev.soundsoftware.core.transcript.*
 import java.io.File
@@ -15,7 +17,7 @@ import kotlinx.coroutines.ensureActive
 
 /**
  * Local speaker diarization: pyannote segmentation-3.0 + 3D-Speaker embedding + fast clustering.
- * Model files live in `models/diarization/`, deployed from the global cache like the ASR models.
+ * Bundled weights are prepared on demand by the device factory.
  */
 data class DiarizationTimings(val threads:Int,val inputMs:Double,val loadMs:Double,val nativeMs:Double,
     val releaseMs:Double,val extraEmbeddingMs:Double,val clusteringMs:Double,val rawTurns:Int,val embeddings:Int)
@@ -26,12 +28,20 @@ interface SpeakerAnalyzer {
     suspend fun analyze(wav: PcmWav, speakerCount: Int?, onProgress: (Float) -> Unit): DiarizationAnalysis
 }
 
-class SherpaDiarizer(private val directory: File,private val numThreads:Int=defaultThreads(),private val worker:SpeakerWorkerConfig?=null,
-    private val observeFeatures: ((List<SpeakerObservation>) -> Unit)? = null) : SpeakerAnalyzer {
-    init {require(numThreads in 1..8)}
-    val segmentationModel get() = File(directory, "segmentation.onnx")
-    val embeddingModel get() = File(directory, "embedding.onnx")
-    override val isReady get() = segmentationModel.length() > 0 && embeddingModel.length() > 0
+class SherpaDiarizer private constructor(
+    private val externalDirectory: File,
+    private val numThreads: Int,
+    private val workerFor: (File) -> SpeakerWorkerConfig?,
+    private val observeFeatures: ((List<SpeakerObservation>) -> Unit)?,
+    private val bundled: BundledModel?,
+) : SpeakerAnalyzer {
+    constructor(directory: File, numThreads: Int = defaultThreads(), worker: SpeakerWorkerConfig? = null,
+        observeFeatures: ((List<SpeakerObservation>) -> Unit)? = null,
+    ) : this(directory, numThreads, { worker }, observeFeatures, null)
+
+    init { require(numThreads in 1..8) }
+    override val isReady get() = bundled?.available == true ||
+        listOf("segmentation.onnx", "embedding.onnx").all { File(externalDirectory, it).length() > 0 }
 
     /** Whole-recording clustering keeps speaker ids consistent; bounded to keep memory predictable. */
     suspend fun diarize(wav: PcmWav, speakerCount: Int?, onProgress: (Float) -> Unit): List<SpeakerTurn> = analyze(wav, speakerCount, onProgress).turns
@@ -40,6 +50,10 @@ class SherpaDiarizer(private val directory: File,private val numThreads:Int=defa
         require(isReady) { "说话人分离模型未就绪" }
         require(wav.sampleRate == 16000 && wav.channels == 1)
         require(wav.durationMs <= MAX_DURATION_MS) { "录音超过 80 分钟，暂不做说话人分离" }
+        val directory = bundled?.prepare() ?: externalDirectory
+        val segmentationModel = File(directory, "segmentation.onnx")
+        val embeddingModel = File(directory, "embedding.onnx")
+        val worker = workerFor(directory)
         val inputStart=System.nanoTime()
         fun ms(start:Long)=(System.nanoTime()-start)/1e6
         val samples = FloatArray(wav.sampleCount.toInt())
@@ -149,12 +163,21 @@ class SherpaDiarizer(private val directory: File,private val numThreads:Int=defa
             val native=File(context.applicationInfo.nativeLibraryDir)
             val supported=android.os.Build.VERSION.SDK_INT>=31 && android.os.Build.SOC_MODEL.startsWith("SM8850")
             val binary=File(native,"libsound_speaker_worker.so")
-            // Use HTP whenever this device and its installed artifacts support it.
-            val npuRuntime=SpeakerNpuRuntime(context,File(directory.parentFile,SpeakerNpuRuntime.MODEL_DIRECTORY),directory)
             val npuBinary=File(native,"libsound_speaker_npu_worker.so")
-            val worker=if(dev.soundsoftware.app.BuildConfig.SPEAKER_NPU_ENABLED && supported && npuBinary.canExecute() && npuRuntime.isReady)SpeakerWorkerConfig(npuBinary,native,4,1,npu=npuRuntime)
-                else if(dev.soundsoftware.app.BuildConfig.SPEAKER_WORKER_ENABLED && supported && binary.canExecute())SpeakerWorkerConfig(binary,native,4,1,minimumDurationMs=20_000) else null
-            return SherpaDiarizer(directory,defaultThreads(),worker,observeFeatures)
+            val bundled=BundledModel(context,directory,"speaker-models",BuildConfig.SPEAKER_WEIGHTS_BUNDLED,
+                R.string.speaker_model_storage_low,R.string.speaker_model_unpack_failed,verifyExternal=true)
+            val workerFor: (File) -> SpeakerWorkerConfig? = { cpuModels ->
+                val npuRuntime=SpeakerNpuRuntime(context,File(directory.parentFile,SpeakerNpuRuntime.MODEL_DIRECTORY),
+                    cpuModels,useBundled=BuildConfig.SPEAKER_WEIGHTS_BUNDLED)
+                when {
+                    BuildConfig.SPEAKER_NPU_ENABLED && supported && npuBinary.canExecute() && npuRuntime.isReady ->
+                        SpeakerWorkerConfig(npuBinary,native,4,1,npu=npuRuntime)
+                    BuildConfig.SPEAKER_WORKER_ENABLED && supported && binary.canExecute() ->
+                        SpeakerWorkerConfig(binary,native,4,1,minimumDurationMs=20_000)
+                    else -> null
+                }
+            }
+            return SherpaDiarizer(directory,defaultThreads(),workerFor,observeFeatures,bundled)
         }
         // Measured on the supported SM8850 phone; retain the conservative setting elsewhere.
         private fun defaultThreads()=if(android.os.Build.VERSION.SDK_INT>=31 && android.os.Build.SOC_MODEL.startsWith("SM8850"))4 else 2

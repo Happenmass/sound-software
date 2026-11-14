@@ -24,7 +24,8 @@ class QwenHtpFiles(context: Context, modelRoot: File) {
     val executable = File(nativeDir, "libsound_qwen_htp_worker.so")
     val runtimeDir = File(app.codeCacheDir, "qwen-htp-2.50.0-v2")
     private val externalModels = File(modelRoot, "qwen-htp-sm8850")
-    private val bundled = BundledAsrModel(app, externalModels)
+    private val bundled = BundledModel(app, externalModels, "asr-models", BuildConfig.ASR_WEIGHTS_BUNDLED,
+        R.string.asr_model_storage_low, R.string.asr_model_unpack_failed)
     val modelDir get() = bundled.directory
     private val manifest by lazy {
         JSONObject(app.assets.open("qwen-htp-manifest.json").bufferedReader().use { it.readText() })

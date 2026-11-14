@@ -85,7 +85,7 @@ python3 tools/diarization-worker/build-npu.py
 python3 tools/deploy-speaker-npu-models.py --serial SERIAL
 ```
 
-`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP。Qwen3-ASR 同样使用 QAIRT 2.50，在独立进程中运行。锁文件内已验证的 PNM-AN10 安装配套权重后，各时长默认走 HTP。第一轮局部声纹和自动人数的干净语音复提共用同一张 batch 1 图、HTP 上下文和 CPU FP32 head。第二轮仍每次最多向 worker 传四段，worker 按顺序逐条运行 batch 1。每段使用自己的有效长度掩码。Pyannote 切分、fbank、统计池化和聚类仍在 CPU。权重缺失直接走 CPU；模型校验、HTP 执行或响应失败会取消本次 worker 结果并使用本地 CPU 重算。手动指定人数只执行第一轮。batch 1 图及 head 共约 49 MB 权重单独部署到 `diarization-npu`。安装公开版后，用 `--package dev.soundsoftware.app.release` 部署模型。构建时从同版 SDK 根目录验证并复制原始许可及声明。
+`-PincludeSpeakerNpu=true` 打包独立 NPU worker 与 2.50 库 asset ZIP。Qwen3-ASR 同样使用 QAIRT 2.50，在独立进程中运行。锁文件内已验证的 PNM-AN10 安装配套权重后，各时长默认走 HTP。第一轮局部声纹和自动人数的干净语音复提共用同一张 batch 1 图、HTP 上下文和 CPU FP32 head。第二轮仍每次最多向 worker 传四段，worker 按顺序逐条运行 batch 1。每段使用自己的有效长度掩码。Pyannote 切分、fbank、统计池化和聚类仍在 CPU。权重缺失直接走 CPU；模型校验、HTP 执行或响应失败会取消本次 worker 结果并使用本地 CPU 重算。手动指定人数只执行第一轮。设置 `-PincludeSpeakerWeights=true` 可将 CPU 模型、batch 1 图及 head 内置到 APK，首次分析时自动准备。未内置的构建可将 batch 1 图及 head 共约 49 MB 权重单独部署到 `diarization-npu`。安装公开版后，用 `--package dev.soundsoftware.app.release` 部署模型。构建时从同版 SDK 根目录验证并复制原始许可及声明。
 
 ## NPU 真机验收
 

@@ -50,6 +50,47 @@ class QwenHtpPhoneTest {
         Unit
     }
 
+    @Test fun freshInstallTranscribesWithBundledSpeakerModels() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("runBundledSpeakerPipeline") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val app = context.applicationContext as SoundApplication
+        val modelDir = File(context.noBackupFilesDir, "speaker-models")
+        assertTrue(dev.soundsoftware.app.BuildConfig.SPEAKER_WEIGHTS_BUNDLED)
+        assertTrue(dev.soundsoftware.app.BuildConfig.ASR_WEIGHTS_BUNDLED)
+        assertTrue(app.processor.diarizer.isReady)
+        assertTrue(!modelDir.exists())
+        assertTrue(File(app.modelDir, "diarization").listFiles().isNullOrEmpty())
+        assertTrue(File(app.modelDir, SpeakerNpuRuntime.MODEL_DIRECTORY).listFiles().isNullOrEmpty())
+        assertTrue(app.repository.recordings.value.isEmpty())
+        val fixtureDir = File(context.getExternalFilesDir(null), "validation/speaker-npu-v2")
+        val input = File(fixtureDir, "dialog.wav")
+        val duration = PcmWav.open(input).durationMs
+        val id = "bundled-speaker-pipeline"
+        try {
+            input.copyTo(app.repository.audioFile(id))
+            app.repository.add(Recording(id, 0, duration))
+            app.processor.enqueue(id, TranscribeOptions(profileId = "qwen-htp", template = SceneTemplate.TRANSCRIPT_ONLY))
+            val done = withTimeout(240_000) {
+                app.repository.recordings.first { rows ->
+                    rows.any { it.id == id && it.stage in setOf(ProcessingStage.DONE, ProcessingStage.FAILED) }
+                }.single { it.id == id }
+            }
+            assertEquals(done.error, ProcessingStage.DONE, done.stage)
+            val transcript = checkNotNull(done.transcript)
+            assertEquals("qnn-htp", transcript.backend)
+            assertEquals(77, transcript.speakerHtpExecutions)
+            assertEquals(2, done.speakers.size)
+            assertTrue(transcript.segments.isNotEmpty())
+            val report = org.json.JSONObject().put("durationMs", duration).put("asrBackend", transcript.backend)
+                .put("speakerHtpExecutions", transcript.speakerHtpExecutions)
+                .put("speakers", done.speakers.size).put("segments", transcript.segments.size)
+                .put("preparedSpeakerFiles", modelDir.walkTopDown().count { it.isFile })
+            File(fixtureDir, "bundled-speaker-pipeline.json").writeText(report.toString(2))
+        } finally {
+            app.repository.delete(id)
+        }
+    }
+
     @Test fun appUidDecodesMixedSpeechAndFullRecording() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("runQwenHtp") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext

@@ -33,21 +33,20 @@ Reopen the app and confirm the model shows **Installed** under **Settings → Lo
 
 ## Speaker diarization
 
-Use [pyannote segmentation 3.0 for sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-segmentation-models) and [the ERes2NetV2 3D-Speaker embedding model](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models). In the same global cache directory, extract the full precision `model.onnx` under `sherpa-onnx-pyannote-segmentation-3-0/` and save `3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common.onnx` as `3dspeaker_eres2netv2_zh.onnx`. Install them with:
-
-```sh
-SOUND_ANDROID_PACKAGE=dev.soundsoftware.app.release bash tools/deploy-models.sh diarization
-```
+Builds with bundled speaker weights prepare them from the APK on first speaker analysis, including when a recording is transcribed or speakers are recalculated. The app can reuse matching weights already installed on an upgraded device. The CPU files need about 74 MiB of private storage. On a supported device, the HTP graph and FP32 head add about 47 MiB. A failure to prepare or run HTP falls back to the CPU models. The Transcript tab displays the verified HTP graph call count.
 
 ### Speaker NPU model setup
 
-Install the two CPU speaker models above. Prepare the matching batch-1 masked ERes2NetV2 context and FP32 head using the [speaker worker instructions](../tools/diarization-worker/README.md#250-npu-混合方案构建和部署). Then run:
+For a source build, use [pyannote segmentation 3.0 for sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-segmentation-models) and [the ERes2NetV2 3D-Speaker embedding model](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models). In the shared `~/.cache/codex/models/sherpa-onnx/` directory, extract the full precision `model.onnx` under `sherpa-onnx-pyannote-segmentation-3-0/` and save `3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common.onnx` as `3dspeaker_eres2netv2_zh.onnx`. Prepare the matching batch-1 context and FP32 head using the [speaker worker instructions](../tools/diarization-worker/README.md#250-npu-混合方案构建和部署). Both embedding passes reuse that HTP context.
+
+`-PincludeSpeakerWeights=true` bundles the CPU files and, when `-PincludeSpeakerNpu=true` is set, the two HTP files. The flag defaults to the value of `includeAsrWeights`. The build verifies all model hashes and includes the upstream model notices under `assets/licenses/speaker-models/`.
+
+For v0.1.9 and other APKs built without bundled speaker weights, install the models separately and reopen the app:
 
 ```sh
+SOUND_ANDROID_PACKAGE=dev.soundsoftware.app.release bash tools/deploy-models.sh diarization
 python3 tools/deploy-speaker-npu-models.py --serial SERIAL --package dev.soundsoftware.app.release
 ```
-
-Close and reopen the app after installing the models. On a validated device with the matching weights, both speaker embedding passes use HTP by default. The first pass and the automatic speaker counting pass reuse one batch-1 graph, HTP context, and CPU FP32 head in the same worker. A failure retries speaker analysis on the local CPU. The Transcript tab displays the verified HTP graph call count.
 
 ## Build the NPU APK
 

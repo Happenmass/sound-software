@@ -399,6 +399,8 @@
   <string name="speaker_analysis_failed">"说话人分离未完成：%1$s"</string>
   <string name="speaker_count">"%1$d 位说话人"</string>
   <string name="speaker_diarization">"说话人分离"</string>
+  <string name="speaker_model_storage_low">存储空间不足，腾出空间后可重试准备内置说话人模型。</string>
+  <string name="speaker_model_unpack_failed">无法准备内置说话人模型，请重试。</string>
   <string name="speaker_model_missing">"说话人模型未安装"</string>
   <string name="speaker_models_description">"pyannote 分段 + 3D-Speaker 声纹"</string>
   <string name="speaker_models_missing">"说话人分离模型未安装，逐字稿不区分说话人"</string>

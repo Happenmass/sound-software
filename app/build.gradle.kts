@@ -19,6 +19,23 @@ val preparePi by tasks.registering(Exec::class) {
         "--jni", jni.get().asFile, "--assets", assets.get().asFile)
 }
 val includeAsrWeights = providers.gradleProperty("includeAsrWeights").getOrElse("false").toBoolean()
+val includeSpeakerWeights = providers.gradleProperty("includeSpeakerWeights").getOrElse(includeAsrWeights.toString()).toBoolean()
+val prepareSpeakerWeights by tasks.registering(Exec::class) {
+    val output = layout.buildDirectory.dir("generated/bundledSpeakerAssets")
+    val cache = file(System.getProperty("user.home") + "/.cache/codex/models")
+    inputs.files(rootProject.file("tools/prepare-bundled-speaker.py"),
+        rootProject.file("tools/speaker-npu-runtime-lock.json"))
+    inputs.dir(rootProject.file("tools/diarization-worker/model-notices"))
+    inputs.files(cache.resolve("sherpa-onnx/sherpa-onnx-pyannote-segmentation-3-0/model.onnx"),
+        cache.resolve("sherpa-onnx/3dspeaker_eres2netv2_zh.onnx"))
+    if (includeSpeakerNpu) inputs.files(cache.resolve("qualcomm/speaker-eres2netv2-qnn250/eres2netv2-masked.bin"),
+        cache.resolve("qualcomm/speaker-eres2netv2-qnn250/embedding-head.onnx"))
+    inputs.property("includeHtp", includeSpeakerNpu)
+    outputs.dir(output)
+    val args = listOf("python3", rootProject.file("tools/prepare-bundled-speaker.py").path,
+        "--output", output.get().asFile.path)
+    commandLine(if (includeSpeakerNpu) args + "--include-htp" else args)
+}
 val prepareAsrWeights by tasks.registering(Exec::class) {
     val output = layout.buildDirectory.dir("generated/bundledAsrAssets")
     inputs.files(rootProject.file("tools/prepare-bundled-asr.py"), rootProject.file("tools/qwen-npu-worker/qnn24/models.json"))
@@ -69,6 +86,7 @@ android {
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
         buildConfigField("boolean", "PI_ENABLED", includePi.toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
+        buildConfigField("boolean", "SPEAKER_WEIGHTS_BUNDLED", includeSpeakerWeights.toString())
         versionCode = 11
         versionName = "0.1.9"
         testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
@@ -99,6 +117,7 @@ android {
         jniLibs.keepDebugSymbols += setOf("**/libsound_qwen_htp_worker.so", "**/libsound_speaker_npu_worker.so", "**/libQnn*.so")
     }
     if (includeAsrWeights) sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/bundledAsrAssets"))
+    if (includeSpeakerWeights) sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/bundledSpeakerAssets"))
     if (includeQwenHtp) {
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qwenHtpJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenHtpAssets"))
@@ -150,3 +169,5 @@ if (includeAsrWeights) {
     require(includeQwenHtp) { "Bundled ASR weights require the Qwen NPU engine." }
     tasks.named("preBuild").configure { dependsOn(prepareAsrWeights) }
 }
+
+if (includeSpeakerWeights) tasks.named("preBuild").configure { dependsOn(prepareSpeakerWeights) }

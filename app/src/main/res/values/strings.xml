@@ -399,6 +399,8 @@
   <string name="speaker_analysis_failed">"Speaker diarization failed: %1$s"</string>
   <string name="speaker_count">"%1$d speakers"</string>
   <string name="speaker_diarization">"Speaker diarization"</string>
+  <string name="speaker_model_storage_low">Free up storage to prepare the built-in speaker models, then retry.</string>
+  <string name="speaker_model_unpack_failed">Could not prepare the built-in speaker models. Please retry.</string>
   <string name="speaker_model_missing">"Speaker models are not installed"</string>
   <string name="speaker_models_description">"pyannote segmentation + 3D-Speaker embeddings"</string>
   <string name="speaker_models_missing">"Install speaker models to label speakers in the transcript."</string>

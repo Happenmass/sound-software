@@ -1,0 +1,11 @@
+Pyannote segmentation 3.0
+Copyright (c) 2022 CNRS. MIT License.
+Source: https://huggingface.co/pyannote/segmentation-3.0
+The ONNX export comes from the sherpa-onnx speaker segmentation model release.
+
+3D-Speaker ERes2NetV2
+Apache License 2.0.
+Source: https://modelscope.cn/models/iic/speech_eres2netv2_sv_zh-cn_16k-common
+The CPU ONNX export comes from the sherpa-onnx speaker recognition model release.
+Sound Software splits the export into a masked batch-1 convolution graph for
+Qualcomm HTP and an FP32 statistics/dense head for CPU inference.

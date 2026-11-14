@@ -30,7 +30,7 @@ On the HONOR Magic V6, the original 24-second INT8 export explicitly copied KV h
 
 ## Speaker analysis on Qualcomm HTP
 
-Version 0.1.9 reuses one batch-1 HTP graph for both speaker embedding passes. Automatic speaker counting uses the same context for its clean-speech pass. If HTP is unavailable or fails, speaker analysis runs on the local CPU. The speaker weights are [installed separately](docs/MODELS.md#speaker-npu-model-setup).
+Version 0.1.9 reuses one batch-1 HTP graph for both speaker embedding passes. Automatic speaker counting uses the same context for its clean-speech pass. If HTP is unavailable or fails, speaker analysis runs on the local CPU. In v0.1.9 the speaker weights are installed separately. Source builds with bundled speaker weights prepare them automatically on first analysis. See the [model guide](docs/MODELS.md#speaker-diarization).
 
 On the HONOR Magic V6, a 44.969-second two-speaker sample took **4.276 s** to analyze automatically, compared with **4.517 s** when the second pass used a separate batch-4 graph. The second pass fell from **0.805 to 0.476 s**, and peak worker RSS fell from **432.25 to 359.73 MiB**. Both versions produced the same six boundaries and speaker assignments. Timing covers speaker analysis.
 

@@ -26,13 +26,13 @@ class SpeakerRawWorker(private val config:SpeakerWorkerConfig,private val modelD
             "--embedding.model=${File(modelDir,"embedding.onnx").path}","--embedding.num-threads=${config.intraThreads}","--embedding.provider=cpu",
             "--clustering.cluster-threshold=0.5","--min-duration-on=0.3","--min-duration-off=0.5")
         val backend=if(config.npu==null)"cpu-parallel" else "qnn-htp-hybrid"
-        config.npu?.prepare()
+        val npuModels=config.npu?.prepare()
         val environment=mutableMapOf("LD_LIBRARY_PATH" to "${config.executable.parent}:${config.nativeDir.path}:/system/lib64:/system_ext/lib64:/vendor/lib64")
         config.npu?.let {
             environment["LD_LIBRARY_PATH"]="${it.runtimeDir.path}:"+environment.getValue("LD_LIBRARY_PATH")
             environment["ADSP_LIBRARY_PATH"]=it.runtimeDir.path
             environment["SOUND_SPEAKER_NPU_RUNTIME"]=it.runtimeDir.path
-            environment["SOUND_SPEAKER_NPU_MODELS"]=it.modelDir.path
+            environment["SOUND_SPEAKER_NPU_MODELS"]=checkNotNull(npuModels).path
             if(config.validateNpu)environment["SOUND_SPEAKER_NPU_VALIDATE"]="1"
             if(config.profileHtp)environment["SOUND_SPEAKER_NPU_PROFILE"]="1"
             if(config.burst)environment["SOUND_SPEAKER_NPU_BURST"]="1"

@@ -106,6 +106,73 @@ class SpeakerHtpValidationTest {
             Triple(23149L,29899L,1),Triple(31030L,39029L,0),Triple(39552L,43973L,1),
         ),canonical(result.turns))
     }
+    @Test fun bundledModelsWorkOnFreshInstallAndFallBackToCpu()=runBlocking {
+        assumeTrue(args.getString("runBundledSpeaker")=="true")
+        assertTrue(dev.soundsoftware.app.BuildConfig.SPEAKER_WEIGHTS_BUNDLED)
+        val cpuDir=File(app.modelDir,"diarization")
+        val htpDir=File(app.modelDir,SpeakerNpuRuntime.MODEL_DIRECTORY)
+        val privateModels=File(context.noBackupFilesDir,"speaker-models")
+        assertTrue(cpuDir.listFiles().isNullOrEmpty())
+        assertTrue(htpDir.listFiles().isNullOrEmpty())
+        assertFalse(privateModels.exists())
+
+        val diarizer=SherpaDiarizer.forDevice(context,cpuDir)
+        assertTrue(diarizer.isReady)
+        assertFalse(privateModels.exists())
+        val file=File(root,"dialog.wav")
+        assertEquals("46d10e76f54f3249b2628148beb542c5b7f30c04471d392a302fa3217068c2a7",file.sha256())
+        val wav=PcmWav.open(file)
+        suspend fun analyze()=withContext(Dispatchers.Default){diarizer.analyze(wav,null){}}
+        var started=SystemClock.elapsedRealtime()
+        val htp=analyze()
+        val firstMs=SystemClock.elapsedRealtime()-started
+        assertEquals("qnn-htp-hybrid",htp.backend)
+        assertEquals(77,htp.npu?.htpExecutions)
+        assertEquals(6,htp.npu?.cleanTurnExecutions)
+        assertEquals(2,htp.turns.map{it.speaker}.distinct().size)
+        assertEquals(6,htp.turns.size)
+        val files=privateModels.walkTopDown().filter{it.isFile}.associateBy{it.name}
+        val expected=mapOf(
+            "segmentation.onnx" to "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079",
+            "embedding.onnx" to "bf1a75b9930474cf3389ef415e6e5d38ca96fea4a3a00f7e301d080a58ee2239",
+            "eres2netv2-masked.bin" to "7615d7f9881e8b294cb2f13d7804102ae21cbd8f4fc5478ecad3ee23c81e6d14",
+            "embedding-head.onnx" to "83ea33b9ea3551214a7a60774da6170b7b59256e1af8fc470b8c926a1f6a18ae",
+        )
+        assertEquals(expected,files.mapValues{it.value.sha256()})
+        val timestamps=files.mapValues{it.value.lastModified()}
+        started=SystemClock.elapsedRealtime()
+        val warm=analyze()
+        val warmMs=SystemClock.elapsedRealtime()-started
+        assertEquals(htp.turns,warm.turns)
+        assertEquals(timestamps,files.mapValues{it.value.lastModified()})
+
+        // Preserve the size to trigger runtime integrity rejection after model preparation.
+        val graph=files.getValue("eres2netv2-masked.bin")
+        java.io.RandomAccessFile(graph,"rw").use {
+            val first=it.read()
+            it.seek(0)
+            it.write(first xor 1)
+        }
+        val cpu=try { analyze() } finally { assertTrue(graph.delete()) }
+        assertEquals("cpu-reference",cpu.backend)
+        assertNull(cpu.npu)
+        assertTrue(cpu.warnings.any{it.startsWith("NPU说话人计算未完成")})
+        assertEquals(canonical(htp.turns),canonical(cpu.turns))
+        val recovered=analyze()
+        assertEquals("qnn-htp-hybrid",recovered.backend)
+        assertEquals(htp.turns,recovered.turns)
+        assertEquals(expected.getValue(graph.name),graph.sha256())
+        assertTrue(cpuDir.listFiles().isNullOrEmpty())
+        assertTrue(htpDir.listFiles().isNullOrEmpty())
+
+        File(root,"bundled-speaker.json").writeText(JSONObject()
+            .put("first",row(file,null,"fresh-install",htp,firstMs,0))
+            .put("warm",row(file,null,"reuse",warm,warmMs,0))
+            .put("cpuFallback",cpu.backend)
+            .put("recovered",recovered.backend)
+            .put("weightsBytes",files.values.sumOf{it.length()})
+            .put("verifiedFiles",JSONArray(expected.keys.toList())).toString(2))
+    }
     @Test fun actualNpuCancellationAndExplicitLocalFallback()=runBlocking {
         enabled();val input=PcmWav.open(File(root,"dialog.wav"))
         val job=launch(Dispatchers.Default){SpeakerRawWorker(configuration(true),File(app.modelDir,"diarization")).analyze(input,2)}
