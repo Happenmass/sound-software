@@ -8,7 +8,7 @@ import java.io.File
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 
-data class SpeakerWorkerConfig(val executable:File,val nativeDir:File,val workers:Int=4,val intraThreads:Int=1,val diagnostics:Boolean=false,val minimumDurationMs:Long=0,val npu:SpeakerNpuRuntime?=null,val validateNpu:Boolean=false,val burst:Boolean=true) {
+data class SpeakerWorkerConfig(val executable:File,val nativeDir:File,val workers:Int=4,val intraThreads:Int=1,val diagnostics:Boolean=false,val minimumDurationMs:Long=0,val npu:SpeakerNpuRuntime?=null,val validateNpu:Boolean=false,val burst:Boolean=true,val firstHtpBatch4:Boolean=false,val profileHtp:Boolean=false) {
     init {require(workers in 1..4 && intraThreads in 1..4 && minimumDurationMs>=0)}
 }
 data class SpeakerNpuEvidence(val htpExecutions:Int,val validated:Int,val minCosine:Double,val maxAbsError:Double,val burst:Boolean,val embeddings:Int=0,val cleanTurnExecutions:Int=0)
@@ -34,6 +34,8 @@ class SpeakerRawWorker(private val config:SpeakerWorkerConfig,private val modelD
             environment["SOUND_SPEAKER_NPU_RUNTIME"]=it.runtimeDir.path
             environment["SOUND_SPEAKER_NPU_MODELS"]=it.modelDir.path
             if(config.validateNpu)environment["SOUND_SPEAKER_NPU_VALIDATE"]="1"
+            if(config.firstHtpBatch4)environment["SOUND_SPEAKER_FIRST_BATCH4"]="1"
+            if(config.profileHtp)environment["SOUND_SPEAKER_NPU_PROFILE"]="1"
             if(config.burst)environment["SOUND_SPEAKER_NPU_BURST"]="1"
         }
         val connection=AndroidQnnWorkerConnection(command,environment,label="说话人",maxLineChars=2_000_000)
@@ -107,6 +109,6 @@ class SpeakerRawWorker(private val config:SpeakerWorkerConfig,private val modelD
             currentCoroutineContext().ensureActive()
             throw AsrException(ErrorCode.BACKEND_UNAVAILABLE,"说话人worker超时")
         } finally {val start=System.nanoTime();connection.close();release=(System.nanoTime()-start)/1e6}
-        RawSpeakerAnalysis(turns,load,elapsed,release,diagnostics.filter{it.contains("OfflineSpeakerDiarization:")},if(config.npu!=null && evidence?.htpExecutions==0)"cpu-no-embedding" else backend,evidence,cleanVectors,cleanMs)
+        RawSpeakerAnalysis(turns,load,elapsed,release,diagnostics.filter{it.contains("OfflineSpeakerDiarization:") || it.startsWith("SOUND_SPEAKER_PROFILE ")},if(config.npu!=null && evidence?.htpExecutions==0)"cpu-no-embedding" else backend,evidence,cleanVectors,cleanMs)
     }
 }

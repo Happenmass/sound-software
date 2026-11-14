@@ -7,8 +7,10 @@ if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_.]*', a.package):
     p.error('Invalid Android package name')
 repo=Path(__file__).resolve().parents[1];root=Path.home()/'.cache/codex/models/qualcomm/speaker-eres2netv2-qnn250-batch4'
 lock=json.loads((repo/'tools/speaker-npu-runtime-lock.json').read_text());target=f'/sdcard/Android/data/{a.package}/files/models/diarization-npu-batch4'
+def model_path(name):
+    return (root.with_name('speaker-eres2netv2-qnn250') if name=='eres2netv2-masked.bin' else root)/name
 for name,item in lock['models'].items():
-    file=root/name
+    file=model_path(name)
     if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest()!=item['sha256']:
         raise SystemExit('Missing or mismatched speaker model; build and validate first: '+name)
 adb=['adb','-s',a.serial]
@@ -16,7 +18,7 @@ subprocess.run(adb+['shell','pm','path',a.package],check=True,stdout=subprocess.
 subprocess.run(adb+['shell','mkdir','-p',target],check=True)
 subprocess.run(adb+['shell','chmod','a+rx',target],check=True)
 for name in lock['models']:
-    subprocess.run(adb+['push',str(root/name),target+'/'+name],check=True)
+    subprocess.run(adb+['push',str(model_path(name)),target+'/'+name],check=True)
     actual=subprocess.check_output(adb+['shell','sha256sum',target+'/'+name],text=True).split()[0]
     subprocess.run(adb+['shell','chmod','a+r',target+'/'+name],check=True)
     if actual!=lock['models'][name]['sha256']:raise SystemExit('Phone model checksum mismatch: '+name)

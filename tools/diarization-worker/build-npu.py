@@ -3,7 +3,7 @@
 import hashlib,os,runpy,shutil,subprocess,tarfile
 from pathlib import Path
 repo=Path(__file__).resolve().parents[2];cache=Path.home()/'.cache/codex'
-root=cache/'speaker-npu-batch4-worker';root.mkdir(exist_ok=True);source=root/'sherpa-onnx-2.0.1'
+root=cache/'speaker-npu-hybrid-worker';root.mkdir(exist_ok=True);source=root/'sherpa-onnx-2.0.1'
 archive=cache/'qnn-validation/sherpa-onnx-v2.0.1.tar.gz'
 assert hashlib.sha256(archive.read_bytes()).hexdigest()=='24ecc0fccf6344c2556e7c229c849e9f61bf9456b915615197d85f35e3f177e7'
 if not (source/'.sound-source-complete').is_file():

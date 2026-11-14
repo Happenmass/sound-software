@@ -41,13 +41,13 @@ SOUND_ANDROID_PACKAGE=dev.soundsoftware.app.release bash tools/deploy-models.sh 
 
 ### Speaker NPU model setup
 
-Install the two CPU speaker models above. Prepare the matching batch-4 masked ERes2NetV2 context and FP32 head using the [speaker worker instructions](../tools/diarization-worker/README.md#250-npu-混合方案构建和部署). Then run:
+Install the two CPU speaker models above. Prepare the matching batch-1 and batch-4 masked ERes2NetV2 contexts and shared FP32 head using the [speaker worker instructions](../tools/diarization-worker/README.md#250-npu-混合方案构建和部署). Then run:
 
 ```sh
 python3 tools/deploy-speaker-npu-models.py --serial SERIAL --package dev.soundsoftware.app.release
 ```
 
-Close and reopen the app after installing the models. On a validated device with the matching weights, both speaker embedding passes use HTP by default. Automatic speaker counting runs the second pass, reusing the same context. A failure retries speaker analysis on the local CPU. The Transcript tab displays the verified HTP graph call count. A batch can contain up to four embeddings.
+Close and reopen the app after installing the models. On a validated device with the matching weights, both speaker embedding passes use HTP by default. The first pass uses batch 1. Automatic speaker counting uses batch 4 for the second pass. The two graphs load on demand in the same worker and share the backend and FP32 head. A failure retries speaker analysis on the local CPU. The Transcript tab displays the verified HTP graph call count. A batch can contain up to four embeddings.
 
 ## Build the NPU APK
 

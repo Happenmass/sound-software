@@ -45,8 +45,8 @@ void Embed(const std::string &request, const std::vector<float> &samples,
     inputs.push_back(stream.get());
     streams.push_back(std::move(stream));
   }
-  auto vectors = extractor.ComputeBatch(inputs);
-  sherpa_onnx::PrintSoundSpeakerNpuStats();
+  auto vectors = extractor.ComputeBatch(inputs, 4);
+  sherpa_onnx::PrintSoundSpeakerNpuStats("clean");
   std::cout << "SOUND_DIAR {\"type\":\"embeddings\",\"vectors\":[";
   for (size_t i = 0; i < vectors.size(); ++i) {
     if (i) std::cout << ',';
@@ -107,7 +107,7 @@ int main(int argc, char **argv) try {
     const auto start = Clock::now();
     auto result = engine.Process(samples.data(), samples.size());
     const auto ms = elapsed(start);
-    sherpa_onnx::PrintSoundSpeakerNpuStats();
+    sherpa_onnx::PrintSoundSpeakerNpuStats("first");
     std::cout << "SOUND_DIAR {\"type\":\"result\",\"protocol\":1,\"backend\":\"qnn-htp-hybrid\",\"pid\":"
               << getpid() << ",\"sequence\":" << ++sequence << ",\"elapsedMs\":" << ms << ",\"turns\":[";
     bool first = true;

@@ -2,18 +2,18 @@
   "sdk": "2.50.0.260828221209",
   "sdkArchiveSha256": "a346ea0e2c8631b46d57261a4969994cd9cc34124a8355bbc7b08b2c8bd859a5",
   "worker": {
-    "cachePath": "speaker-npu-batch4-worker/staged/sound-speaker-npu-worker",
-    "sha256": "e1ab6fc5cb220af58ab7b321d30e1bbe149ddb7e002e6103e3288bbdf2cb89c7"
+    "cachePath": "speaker-npu-hybrid-worker/staged/sound-speaker-npu-worker",
+    "sha256": "4b495648a739ebe68688f3467b290bddcf8f82f03a73fdc179a924616c5f140a"
   },
   "sources": {
-    "tools/diarization-worker/npu-embedding.h": "21cc2b27932437aba5eab47301572c9f2e493fa4e064445a523cfef4e89a05ec",
-    "tools/diarization-worker/build-npu.py": "bcdece68e75fead4f903c992473e8b53d359b607c0e53420c113a36f1c2248ba",
+    "tools/diarization-worker/npu-embedding.h": "06b1b5966df892acf68da37047af510b94d14a587f9519df2e9d3fb8410abc31",
+    "tools/diarization-worker/build-npu.py": "f263d46c0bfa871efbb4720b72f50c33e88a8e932f4a05381c3330cccb00038f",
     "tools/diarization-worker/main.cc": "67beb571843898ad28696c8cf58f8478672211377d08043ba68e66dd41ea2464",
     "tools/diarization-worker/parallel.h": "6f85b8456cac9688741f978eacb13d7c1329b6a57a62a7a4a517479e80844327",
     "tools/diarization-worker/build.py": "5a3c2497b2a4cc68e7dcaac6001fad3e4f928fe191eff0211d2243d53111ea52",
     "tools/diarization-worker/export-npu-models.py": "94cea66d691c57b58ff7accaa7f45f461544440c77eabb51cc4f9bcf66710b46",
-    "tools/diarization-worker/npu-main.cc": "44a6f82c5c80fc2468d594cf4d9f09973bf1adc18811b7b5bc1144dea5630cf5",
-    "tools/diarization-worker/batch4-build-patches.py": "971070b2dbc4844867491e7a5d83e9b727141748b07025552f5e51444c8346b4",
+    "tools/diarization-worker/npu-main.cc": "aa71a0cb83fc60b7f5662e12b2192d405299da5fbad3e5890f23c4824feb4cfe",
+    "tools/diarization-worker/batch4-build-patches.py": "4273db9a1ff21aa0c992bcc9ea0af9416eba92d4b1310cda22e5600cc8f00ff2",
     "tools/diarization-worker/export-batch4.py": "726924a2d3b5bf62af5bf8bd59a5cd36ed0e9db2370079870149f84eec22b98b"
   },
   "libraries": {
@@ -35,6 +35,10 @@
     }
   },
   "models": {
+    "eres2netv2-masked.bin": {
+      "sha256": "7615d7f9881e8b294cb2f13d7804102ae21cbd8f4fc5478ecad3ee23c81e6d14",
+      "bytes": 33640672
+    },
     "eres2netv2-masked-batch4.bin": {
       "sha256": "11ba406d8937fd608b9750dc1748e1dd2264dcae0f2da2ea267b764b0db691ec",
       "bytes": 39514304
