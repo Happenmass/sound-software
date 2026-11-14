@@ -85,16 +85,16 @@ private fun BottomNav(tab: Tab, onSelect: (Tab) -> Unit, onAssistant: () -> Unit
             NavTab(Tab.RECORDINGS, tab, Icons.Wave, stringResource(R.string.recordings), onSelect)
             NavTab(Tab.TODOS, tab, Icons.Todo, stringResource(R.string.todos), onSelect)
         }
-        val piShape = RoundedCornerShape(22.dp)
+        val assistantShape = RoundedCornerShape(22.dp)
         Box(
             Modifier.align(Alignment.Top).size(60.dp)
-                .shadow(10.dp, piShape, ambientColor = C.Ink.copy(alpha = 0.16f), spotColor = C.Ink.copy(alpha = 0.22f))
-                .clip(piShape)
+                .shadow(10.dp, assistantShape, ambientColor = C.Ink.copy(alpha = 0.16f), spotColor = C.Ink.copy(alpha = 0.22f))
+                .clip(assistantShape)
                 .background(Brush.verticalGradient(listOf(Color(0xFF334A68), Color(0xFF1A263C))))
                 .tap(stringResource(R.string.recording_assistant), onClick = onAssistant),
             Alignment.Center,
         ) {
-            T("Pi", ts(29, 800, Color.White), maxLines = 1)
+            T("Ai", ts(29, 800, Color.White), maxLines = 1)
         }
         NavGroup(Modifier.weight(1f)) {
             NavTab(Tab.DEVICE, tab, Icons.Bean, stringResource(R.string.device), onSelect)
