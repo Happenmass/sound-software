@@ -91,7 +91,7 @@ private fun BottomNav(tab: Tab, onSelect: (Tab) -> Unit, onAssistant: () -> Unit
                     .tap(stringResource(R.string.recording_assistant), onClick = onAssistant),
                 Alignment.Center,
             ) {
-                Ico(Icons.Pi, 38.dp, Color.White)
+                T("Pi", ts(29, 800, Color.White), maxLines = 1)
             }
         }
         NavTab(Tab.DEVICE, tab, Icons.Bean, stringResource(R.string.device), onSelect)
