@@ -72,7 +72,7 @@ class QwenHtpPhoneTest {
         assertTrue(File(app.modelDir, "diarization").listFiles().isNullOrEmpty())
         assertTrue(File(app.modelDir, SpeakerNpuRuntime.MODEL_DIRECTORY).listFiles().isNullOrEmpty())
         assertTrue(app.repository.recordings.value.isEmpty())
-        val fixtureDir = File(context.getExternalFilesDir(null), "validation/speaker-npu-v2")
+        val fixtureDir = speakerFixtureDir(context)
         val input = File(fixtureDir, "dialog.wav")
         val duration = PcmWav.open(input).durationMs
         val id = "bundled-speaker-pipeline"
@@ -106,7 +106,7 @@ class QwenHtpPhoneTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val app = context.applicationContext as SoundApplication
         assumeTrue(app.packageName.endsWith(".speakerpolish"))
-        val fixture = File(context.getExternalFilesDir(null), "validation/speaker-npu-v2/dialog.wav")
+        val fixture = File(speakerFixtureDir(context), "dialog.wav")
         val root = File(context.cacheDir, "proofreading-" + SystemClock.elapsedRealtimeNanos())
         val repository = RecordingRepository(root)
         val settings = SettingsStore(context)
@@ -164,6 +164,12 @@ class QwenHtpPhoneTest {
             root.deleteRecursively()
         }
         Unit
+    }
+
+    private fun speakerFixtureDir(context: android.content.Context): File {
+        val privateFixture = File(context.cacheDir, "validation/speaker-npu-v2")
+        return if (File(privateFixture, "dialog.wav").isFile) privateFixture
+        else File(context.getExternalFilesDir(null), "validation/speaker-npu-v2")
     }
 
     @Test fun appUidDecodesMixedSpeechAndFullRecording() = runBlocking {
