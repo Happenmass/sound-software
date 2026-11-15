@@ -163,6 +163,12 @@ Pi 和 Codex 都需要 Landlock ABI 6。启动器限制任务文件的读写，�
 
 Magic V6 原签名覆盖 v0.1.12 后，设置页实测仅显示 Pi 和 Codex。迁移测试覆盖未配置、旧自动、旧内置助手、Pi 和 Codex 五种存量设置，保留两组模型配置。正式包合成库用同一真实模型重跑了文件交接，Codex 写入 728689，同会话切到 Pi 后从同一持久文件读出并写回 1457378。
 
+### 录音工具 stdio MCP 真机验证
+
+实验仅在 `.mcppoc` 调试包启用，构建时在前述 debug 命令中改用 `-PdebugApplicationIdSuffix=.mcppoc`。Pi 以 SDK 的 stdio 客户端执行 `tools/list` 和 `tools/call`。Codex 0.165.0 读取本轮 `mcp_servers.recordings` 配置，使用原生 MCP 客户端启动同一个桥接进程。桥接通过本轮授权的 IPv4 回环端口向 Android 查目录和执行工具。Android 按入口绑定 `RecordingIndex.toolsFor(recordingId)`，记录本轮证据并核对最终引用。录音数据库留在 Android 主进程的权限范围。
+
+Magic V6 上运行 `AgentBackendPhoneTest.stdioMcpDiscoversFiveToolsAndRejectsAnotherRecording`（`-e agentPhone true`）。独立库包含两条原文带相同关键词的合成录音。对 Pi 和 Codex，模型请求均含 MCP 发现的五个工具。在录音 A 的问答页，模拟模型先调用 `search_recordings`，返回且核验了 A 的引用。随后显式传入 B 的 ID 调用 `read_segments`，Android 返回 `recording_scope_denied`，结果无录音证据。签名正式包 v0.1.12 的设备 APK 摘要与原产物一致。
+
 ### Pi GUI 项目的桥接
 
 | 项目 | 运行时与 GUI 的桥接 |

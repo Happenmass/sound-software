@@ -3,6 +3,8 @@ package dev.soundsoftware.app.agent
 import dev.soundsoftware.core.agent.*
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,49 +42,68 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
             check(session.id == sessionId) { "The recording session changed. Reopen it and try again." }
             val invalidated = stored.getValue("invalidated").jsonPrimitive.boolean
             val tools = index.toolsFor(recordingId)
-            val receipts = linkedSetOf<RecordingCitation>()
-            val trace = mutableListOf<AgentTraceStep>()
+            val receipts = ConcurrentHashMap.newKeySet<RecordingCitation>()
+            val trace = CopyOnWriteArrayList<AgentTraceStep>()
             val workspace = question.takeIf(NodeWorkspaceTool::requested)?.let { NodeWorkspaceTool(sandbox, recordingId) }
             val catalog = modelCatalog(recordingId)
-            val answer = CodexModelRelay(base, apiKey, httpClient).use { relay ->
-                val args = listOf(
-                    "-c", "model_provider=\"sound\"",
-                    "-c", "model_providers.sound.name=\"Sound Software\"",
-                    "-c", "model_providers.sound.base_url=${JsonPrimitive(relay.localBase)}",
-                    "-c", "model_providers.sound.wire_api=\"responses\"",
-                    "-c", "web_search=\"disabled\"",
-                    "-c", "model_catalog_json=\"models.json\"",
-                    "--disable", "shell_tool",
-                    "--disable", "shell_snapshot",
-                    "--disable", "code_mode_host",
-                    "--disable", "incremental_tools",
-                    "app-server", "--listen", "stdio://",
-                )
-                sandbox.start(sandbox.codex, args, recordingId, relay.port) { work ->
-                    File(work, "models.json").writeText(catalog)
-                }.use { child ->
-                    runTurn(child, model, recordingId, session, invalidated, question, language, workspace != null, onEvent) { name, arguments ->
-                        check(index.corpusGeneration == generation) { "The recording library changed. Please ask again." }
-                        val initial = AgentTraceStep(id = trace.size, kind = "tool", title = name,
-                            toolName = name, arguments = arguments.toString())
-                        trace += initial
-                        onEvent(AssistantEvent.ToolProgress(initial))
-                        val started = System.nanoTime()
-                        val result = try {
-                            if (workspace != null) workspace.execute(name, arguments) else tools.execute(name, arguments)
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (_: Exception) {
-                            buildJsonObject { put("error", "Invalid recording tool or arguments") }
+            suspend fun execute(name: String, arguments: JsonObject): JsonObject {
+                check(index.corpusGeneration == generation) { "The recording library changed. Please ask again." }
+                val initial = AgentTraceStep(id = trace.size, kind = "tool", title = name,
+                    toolName = name, arguments = arguments.toString())
+                trace += initial
+                onEvent(AssistantEvent.ToolProgress(initial))
+                val started = System.nanoTime()
+                val result = try {
+                    if (workspace != null) workspace.execute(name, arguments) else tools.execute(name, arguments)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: RecordingScopeDenied) {
+                    buildJsonObject { put("error", error.message); put("code", "recording_scope_denied") }
+                } catch (_: Exception) {
+                    buildJsonObject { put("error", "Invalid recording tool or arguments") }
+                }
+                (result["evidence"] as? JsonArray)?.forEach { receipts += json.decodeFromJsonElement<RecordingCitation>(it) }
+                val step = initial.copy(status = if ("error" in result) "failed" else "done",
+                    elapsedMs = (System.nanoTime() - started) / 1_000_000, result = result.toString())
+                trace[step.id] = step
+                onEvent(AssistantEvent.ToolProgress(step))
+                return result
+            }
+            val mcp = if (sandbox.recordingMcpEnabled && workspace == null) RecordingMcpBridge(::execute) else null
+            val answer = mcp.use {
+                CodexModelRelay(base, apiKey, httpClient).use { relay ->
+                    val args = listOf(
+                        "-c", "model_provider=\"sound\"",
+                        "-c", "model_providers.sound.name=\"Sound Software\"",
+                        "-c", "model_providers.sound.base_url=${JsonPrimitive(relay.localBase)}",
+                        "-c", "model_providers.sound.wire_api=\"responses\"",
+                        "-c", "web_search=\"disabled\"",
+                        "-c", "model_catalog_json=\"models.json\"",
+                        "--disable", "shell_tool",
+                        "--disable", "shell_snapshot",
+                        "--disable", "code_mode_host",
+                        "--disable", "incremental_tools",
+                        "app-server", "--listen", "stdio://",
+                    )
+                    sandbox.start(sandbox.codex, args, recordingId, relay.port, mcpPort = mcp?.port) { work ->
+                        File(work, "models.json").writeText(catalog)
+                        if (mcp != null) {
+                            sandbox.stageRecordingMcp(work, mcp)
+                            File(work, "home").mkdirs()
+                            File(work, "home/config.toml").writeText("""
+                                [mcp_servers.recordings]
+                                command = ${JsonPrimitive(sandbox.node)}
+                                args = [${JsonPrimitive(File(work, "recording-mcp.cjs").absolutePath)}]
+                                cwd = ${JsonPrimitive(work.absolutePath)}
+                                required = true
+                            """.trimIndent())
                         }
-                        (result["evidence"] as? JsonArray)?.forEach {
-                            receipts += json.decodeFromJsonElement<RecordingCitation>(it)
+                    }.use { child ->
+                        runTurn(child, model, recordingId, session, invalidated, question, language, workspace != null,
+                            mcp != null, onEvent) { name, arguments ->
+                            check(mcp == null) { "Recording tools require MCP for this turn" }
+                            execute(name, arguments)
                         }
-                        val step = initial.copy(status = if ("error" in result) "failed" else "done",
-                            elapsedMs = (System.nanoTime() - started) / 1_000_000, result = result.toString())
-                        trace[step.id] = step
-                        onEvent(AssistantEvent.ToolProgress(step))
-                        result
                     }
                 }
             }
@@ -98,7 +119,7 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
         }
 
     private suspend fun runTurn(child: AgentSandbox.Child, model: String, recordingId: String?,
-        session: AgentSession, invalidated: Boolean, question: String, language: String, workspace: Boolean,
+        session: AgentSession, invalidated: Boolean, question: String, language: String, workspace: Boolean, mcp: Boolean,
         onEvent: (AssistantEvent) -> Unit, tool: suspend (String, JsonObject) -> JsonObject): String {
         fun request(id: Int?, method: String, params: JsonObject = buildJsonObject {}) = child.send(buildJsonObject {
             id?.let { put("id", it) }
@@ -129,7 +150,7 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
             val boundary = recordingId?.let { "\nOnly query the current recording, whose recordingId is $it." }.orEmpty()
             put("baseInstructions", (if (workspace) NodeWorkspaceTool.prompt(language) else prompt + boundary) +
                 "\nCurrent time: " + java.time.ZonedDateTime.now())
-            put("dynamicTools", buildJsonArray {
+            if (!mcp) put("dynamicTools", buildJsonArray {
                 val schemas = if (workspace) NodeWorkspaceTool.schemas else AgentToolSchemas.json
                 schemas.forEach { entry ->
                     val function = entry.jsonObject.getValue("function").jsonObject

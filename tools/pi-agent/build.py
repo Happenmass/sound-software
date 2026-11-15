@@ -104,7 +104,7 @@ def main():
         )
 
         for name in ("package.json", "package-lock.json", "android-host.mjs", "management.mjs", "recording-loop.mjs",
-                     "recording-sessions.mjs", "recording-prompts.mjs"):
+                     "recording-sessions.mjs", "recording-prompts.mjs", "recording-mcp.mjs"):
             shutil.copyfile(source / name, work / name)
         subprocess.run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=work, check=True)
         for manifest in sorted((work / "node_modules").glob("**/package.json")):
@@ -115,12 +115,13 @@ def main():
                 if notice.is_file() and notice.name.upper().startswith(("LICENSE", "NOTICE", "COPYING")):
                     name = str(package.relative_to(work / "node_modules")).replace("/", "-")
                     shutil.copyfile(notice, licenses / f"{name}-{notice.name}")
-        subprocess.run([
-            work / "node_modules/.bin/esbuild", work / "android-host.mjs",
-            "--bundle", "--platform=node", "--format=cjs", "--target=node22",
-            f"--outfile={args.assets / 'pi-host.cjs'}", "--legal-comments=eof",
-            "--log-level=warning",
-        ], cwd=work, check=True)
+        for entry, output in (("android-host.mjs", "pi-host.cjs"), ("recording-mcp.mjs", "recording-mcp.cjs")):
+            subprocess.run([
+                work / "node_modules/.bin/esbuild", work / entry,
+                "--bundle", "--platform=node", "--format=cjs", "--target=node22",
+                f"--outfile={args.assets / output}", "--legal-comments=eof",
+                "--log-level=warning",
+            ], cwd=work, check=True)
 
 
 def verify(path, expected):

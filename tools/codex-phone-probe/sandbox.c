@@ -74,19 +74,21 @@ int main(int argc, char** argv) {
     };
     int ruleset = syscall(__NR_landlock_create_ruleset, &policy, sizeof(policy), 0);
     if (ruleset < 0) fail("landlock_create_ruleset");
-    const char* relay = getenv("SOUND_MODEL_RELAY_PORT");
     const int script = getenv("SOUND_AGENT_SCRIPT") != NULL;
-    if (script && relay) return 125;
-    if (relay) {
+    const char* port_variables[] = {"SOUND_MODEL_RELAY_PORT", "SOUND_RECORDING_MCP_PORT"};
+    for (size_t i = 0; i < sizeof(port_variables) / sizeof(port_variables[0]); i++) {
+        const char* allowed_port = getenv(port_variables[i]);
+        if (!allowed_port) continue;
+        if (script) return 125;
         char* end;
-        unsigned long port = strtoul(relay, &end, 10);
+        unsigned long port = strtoul(allowed_port, &end, 10);
         if (!port || port > 65535 || *end) return 125;
         struct landlock_net_port_attr rule = {
             .allowed_access = LANDLOCK_ACCESS_NET_CONNECT_TCP, .port = port,
         };
         if (syscall(__NR_landlock_add_rule, ruleset, LANDLOCK_RULE_NET_PORT, &rule, 0) < 0)
-            fail("landlock_add_rule relay");
-        unsetenv("SOUND_MODEL_RELAY_PORT");
+            fail("landlock_add_rule connect port");
+        unsetenv(port_variables[i]);
     }
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) < 0) fail("PR_SET_PDEATHSIG");
     allow(ruleset, argv[1], job_fs);

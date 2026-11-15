@@ -23,7 +23,11 @@ class HttpAgentModel(private val config: LlmConfig, private val key: String?, cl
     override suspend fun completeStreaming(messages: List<AgentMessage>, onDraft: (String) -> Unit): AgentReply =
         request(messages, true, onDraft)
 
-    private suspend fun request(messages: List<AgentMessage>, tools: Boolean, onDraft: ((String) -> Unit)?): AgentReply {
+    suspend fun completeStreaming(messages: List<AgentMessage>, discoveredTools: JsonArray, onDraft: (String) -> Unit): AgentReply =
+        request(messages, true, onDraft, discoveredTools)
+
+    private suspend fun request(messages: List<AgentMessage>, tools: Boolean, onDraft: ((String) -> Unit)?,
+        schemas: JsonArray = toolSchemas): AgentReply {
         onRequestMessages?.invoke(messages)
         val body = buildJsonObject {
             put("model", config.model); put("reasoning_effort",config.reasoningEffort)
@@ -34,7 +38,7 @@ class HttpAgentModel(private val config: LlmConfig, private val key: String?, cl
                     put("id", c.id); put("type", "function"); putJsonObject("function") { put("name", c.name); put("arguments", c.arguments) }
                 }) } })
             }) } })
-            if (tools) { put("tools", toolSchemas); put("tool_choice", "auto") }
+            if (tools) { put("tools", schemas); put("tool_choice", "auto") }
             if (onDraft != null) {
                 put("stream", true)
                 putJsonObject("stream_options") { put("include_usage", true) }
