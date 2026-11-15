@@ -107,7 +107,7 @@ fun AssistantContent(vm: AppViewModel, recordingId: String? = null, recordingTit
                         if (recordingId != null) TextButton(onClick = { vm.push(Screen.Assistant) }) {
                             T(stringResource(R.string.assistant_open_all), ts(13, 500, C.Blue))
                         }
-                        if (!vm.llmReady()) PillButton(stringResource(R.string.configure_notes_service)) { vm.push(Screen.LlmService) }
+                        if (!vm.assistantReady()) PillButton(stringResource(R.string.assistant_backend)) { vm.push(Screen.AssistantSettings) }
                     }
                 }
                 itemsIndexed(state.session.turns, key = { index, _ -> "${state.session.id}-$index" }) { _, turn ->

@@ -8,15 +8,20 @@ val includeSpeakerWorker = providers.gradleProperty("includeSpeakerWorker").getO
 val includeSpeakerNpu = providers.gradleProperty("includeSpeakerNpu").getOrElse("false").toBoolean()
 val includeQwenHtp = providers.gradleProperty("includeQwenHtp").getOrElse("false").toBoolean()
 val includePi = providers.gradleProperty("includePi").getOrElse("false").toBoolean()
+val codexArchive = providers.gradleProperty("codexArchive").orNull?.let(rootProject::file)
+val includeAgentSandbox = includePi || codexArchive != null
 val preparePi by tasks.registering(Exec::class) {
     val source = rootProject.file("tools/pi-agent")
     val sdk = android.sdkDirectory
     val jni = layout.buildDirectory.dir("generated/piJni")
     val assets = layout.buildDirectory.dir("generated/piAssets")
     inputs.files(fileTree(source) { include("*.mjs", "*.json", "*.cc", "*.py") })
+    inputs.files(rootProject.file("tools/codex-phone-probe/node-main.cc"), rootProject.file("tools/codex-phone-probe/sandbox.c"))
+    codexArchive?.let { inputs.file(it) }
     outputs.dirs(jni, assets)
     commandLine("python3", source.resolve("build.py"), "--ndk", sdk.resolve("ndk/28.2.13676358"),
         "--jni", jni.get().asFile, "--assets", assets.get().asFile)
+    codexArchive?.let { args("--codex", it) }
 }
 val includeAsrWeights = providers.gradleProperty("includeAsrWeights").getOrElse("false").toBoolean()
 val includeSpeakerWeights = providers.gradleProperty("includeSpeakerWeights").getOrElse(includeAsrWeights.toString()).toBoolean()
@@ -77,6 +82,7 @@ val prepareSpeakerNpuNotices = registerQnnNotices("speakerNpuNotices", "2.50",
 android {
     namespace = "dev.soundsoftware.app"
     compileSdk = 35
+    testBuildType = providers.gradleProperty("androidTestBuildType").getOrElse("debug")
     defaultConfig {
         applicationId = "dev.soundsoftware.app"
         minSdk = 26
@@ -85,10 +91,11 @@ android {
         buildConfigField("boolean", "SPEAKER_NPU_ENABLED", includeSpeakerNpu.toString())
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
         buildConfigField("boolean", "PI_ENABLED", includePi.toString())
+        buildConfigField("boolean", "CODEX_ENABLED", (codexArchive != null).toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
         buildConfigField("boolean", "SPEAKER_WEIGHTS_BUNDLED", includeSpeakerWeights.toString())
-        versionCode = 12
-        versionName = "0.1.10"
+        versionCode = 13
+        versionName = "0.1.11"
         testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
@@ -122,9 +129,10 @@ android {
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qwenHtpJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenHtpAssets"))
     }
-    if (includePi) {
+    if (includeAgentSandbox) {
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/piJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/piAssets"))
+        packaging.jniLibs.keepDebugSymbols += "**/libsound_agent_codex.so"
         packaging.jniLibs.pickFirsts += "**/libc++_shared.so"
     }
     if (includeSpeakerWorker) sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerJni"))
@@ -163,7 +171,7 @@ if (includeSpeakerWorker) tasks.named("preBuild").configure { dependsOn(prepareS
 if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu, prepareSpeakerNpuNotices) }
 
 if (includeQwenHtp) tasks.named("preBuild").configure { dependsOn(prepareQwenHtp) }
-if (includePi) tasks.named("preBuild").configure { dependsOn(preparePi) }
+if (includeAgentSandbox) tasks.named("preBuild").configure { dependsOn(preparePi) }
 
 if (includeAsrWeights) {
     require(includeQwenHtp) { "Bundled ASR weights require the Qwen NPU engine." }

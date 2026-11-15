@@ -3,13 +3,19 @@ package dev.soundsoftware.app.agent
 import dev.soundsoftware.app.BuildConfig
 import dev.soundsoftware.app.R
 import dev.soundsoftware.app.data.SettingsStore
+import dev.soundsoftware.app.data.AppSettings
+import dev.soundsoftware.app.data.AssistantBackend
+import dev.soundsoftware.app.data.AssistantModelSettings
 import dev.soundsoftware.app.processing.Processor
 import dev.soundsoftware.core.agent.*
 import dev.soundsoftware.core.analysis.LlmConfig
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 @Serializable
@@ -51,8 +57,18 @@ class AgentController(
     private val index: RecordingIndex,
     private val settings: SettingsStore,
     private val scope: CoroutineScope,
-    private val runtime: PiAgentLoop? = null,
+    private val sandbox: AgentSandbox,
+    private val httpClient: okhttp3.OkHttpClient = okhttp3.OkHttpClient(),
 ) {
+    private val activeTurn = Mutex()
+    private val pi = PiAgentLoop(sandbox)
+    private val codex = CodexAgentLoop(sandbox, index, httpClient)
+
+    private suspend fun backend(config: AppSettings): AssistantBackend =
+        config.assistantBackend ?: withContext(Dispatchers.IO) {
+            if (BuildConfig.PI_ENABLED && sandbox.supported) AssistantBackend.PI else AssistantBackend.BUILT_IN
+        }
+
     internal var testRequestObserver: ((List<AgentMessage>) -> Unit)? = null
     private class SessionSlot {
         val state = MutableStateFlow(AssistantState())
@@ -87,8 +103,10 @@ class AgentController(
     }
 
     private suspend fun load(slot: SessionSlot, recordingId: String?) {
-        val session = runtime?.command("open", recordingId, index)
-            ?: (index.latestSession(recordingId) ?: AgentSession()).snapshot()
+        val generation = index.corpusGeneration
+        val session = (index.latestSession(recordingId) ?: AgentSession().also {
+            index.writeAssistantBody(recordingId, generation, Json.encodeToJsonElement(it).jsonObject, reset = false)
+        }).snapshot()
         slot.state.value = AssistantState(session = session, ready = true, contextUsage = session.lastUsage)
     }
 
@@ -120,17 +138,46 @@ class AgentController(
         publish(AssistantEvent.Started(question))
         slot.job = scope.launch {
             try {
-                val config = settings.state.value.llm
+                val profile = settings.state.value
+                val selected = backend(profile)
+                val language = settings.outputLanguage()
+                val workspace = NodeWorkspaceTool.requested(question)
+                check(!workspace || selected != AssistantBackend.BUILT_IN) {
+                    settings.text(R.string.assistant_node_requires_backend)
+                }
+                val bundled = when (selected) {
+                    AssistantBackend.CODEX -> BuildConfig.CODEX_ENABLED
+                    AssistantBackend.PI -> BuildConfig.PI_ENABLED
+                    AssistantBackend.BUILT_IN -> true
+                }
+                check(bundled && (selected == AssistantBackend.BUILT_IN || withContext(Dispatchers.IO) { sandbox.supported })) {
+                    settings.text(R.string.assistant_backend_unavailable)
+                }
+                val notes = AssistantModelSettings(profile.llm.baseUrl, profile.llm.model)
+                val (config, keyName) = when {
+                    selected == AssistantBackend.CODEX -> profile.codex to AssistantModelSettings.CODEX_KEY
+                    selected == AssistantBackend.PI && profile.pi.baseUrl.isNotBlank() -> profile.pi to AssistantModelSettings.PI_KEY
+                    else -> notes to Processor.KEY_LLM
+                }
                 require(config.baseUrl.isNotBlank() && config.model.isNotBlank()) {
                     settings.text(R.string.assistant_config_required)
                 }
                 val url = config.baseUrl.toHttpUrl()
-                val test = BuildConfig.DEBUG && url.host in setOf("localhost", "127.0.0.1", "10.0.2.2")
-                val language = settings.outputLanguage()
-                val model = HttpAgentModel(LlmConfig(url, config.model, allowInsecureForTests = test, outputLanguage = language),
-                    settings.secrets.get(Processor.KEY_LLM), onRequestMessages = testRequestObserver.takeIf { BuildConfig.DEBUG })
-                val session = if (runtime != null) runtime.command("ask", recordingId, index, sessionId,
-                    question, language, model, ::publish) else legacyAsk(recordingId, sessionId, question, language, model, ::publish)
+                val apiKey = settings.secrets.get(keyName)
+                val session = activeTurn.withLock {
+                    if (selected == AssistantBackend.CODEX) {
+                        require(url.isHttps || Processor.debugLoopback(url)) { settings.text(R.string.llm_https_required) }
+                        codex.ask(recordingId, sessionId, question, language, url, config.model, apiKey, ::publish)
+                    } else {
+                        val test = BuildConfig.DEBUG && url.host in setOf("localhost", "127.0.0.1", "10.0.2.2")
+                        val model = HttpAgentModel(LlmConfig(url, config.model, allowInsecureForTests = test, outputLanguage = language),
+                            apiKey, client = httpClient, onRequestMessages = testRequestObserver.takeIf { BuildConfig.DEBUG },
+                            toolSchemas = if (workspace) NodeWorkspaceTool.schemas else AgentToolSchemas.json)
+                        if (selected == AssistantBackend.PI) pi.command("ask", recordingId, index, sessionId,
+                            question, language, model, ::publish)
+                        else legacyAsk(recordingId, sessionId, question, language, model, ::publish)
+                    }
+                }
                 publish(AssistantEvent.Completed(session))
             } catch (error: CancellationException) {
                 publish(AssistantEvent.Cancelled)
@@ -144,12 +191,17 @@ class AgentController(
     private suspend fun legacyAsk(recordingId: String?, sessionId: String, question: String, language: String,
         model: AgentModel, publish: (AssistantEvent) -> Unit): AssistantSession {
         val generation = index.corpusGeneration
-        val session = index.latestSession(recordingId) ?: AgentSession(id = sessionId)
+        val stored = index.readAssistantBody(recordingId, generation)
+        val invalidated = stored.getValue("invalidated").jsonPrimitive.boolean
+        val session = (index.latestSession(recordingId) ?: AgentSession(id = sessionId)).let {
+            if (invalidated) it.copy(memory = "", firstKeptTurn = it.turns.size,
+                contextMessages = emptyList(), contextInitialized = true, lastUsage = null) else it
+        }
         val result = RecordingAgent(model, index.toolsFor(recordingId), outputLanguage = language,
             recordingId = recordingId).ask(session, question,
             onUsage = { publish(AssistantEvent.Usage(it)) }, onTrace = { publish(AssistantEvent.ToolProgress(it)) },
             onDraft = { publish(AssistantEvent.Draft(it)) })
-        index.saveSession(result.session, recordingId, generation.takeIf { recordingId == null })
+        index.writeAssistantBody(recordingId, generation, Json.encodeToJsonElement(result.session).jsonObject, reset = false)
         return result.session.snapshot()
     }
 
@@ -164,10 +216,10 @@ class AgentController(
         slot.state.update { it.copy(busy = true) }
         scope.launch {
             try {
-                val session = if (runtime != null) runtime.command("clear", recordingId, index) else {
-                    index.clearSessions(recordingId)
-                    AssistantSession()
-                }
+                val generation = index.corpusGeneration
+                val empty = AgentSession()
+                index.writeAssistantBody(recordingId, generation, Json.encodeToJsonElement(empty).jsonObject, reset = true)
+                val session = empty.snapshot()
                 slot.state.value = AssistantState(session = session, ready = true)
             } catch (error: CancellationException) {
                 throw error

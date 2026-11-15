@@ -14,6 +14,9 @@ DIGEST = "d6fd9f610fe5d81fede8f0d400c5a62723247725a19831835f15abf4f0604250"
 NODE_LICENSE = f"https://raw.githubusercontent.com/nodejs/node/v{VERSION}/LICENSE"
 NODE_LICENSE_DIGEST = "5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace"
 PI_LICENSE = "https://raw.githubusercontent.com/earendil-works/pi/v1.5.2/LICENSE"
+CODEX_TAG = "rust-v0.165.0"
+CODEX_DIGEST = "e5e5c2b300a3e2b0e8a1f887e928a3ecc63d825efd5b0c9ecd83cda5e5a060b8"
+CODEX_LICENSE_DIGEST = "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc"
 PI_LICENSE_DIGEST = "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
 
 
@@ -37,9 +40,11 @@ def main():
     parser.add_argument("--ndk", type=Path, required=True)
     parser.add_argument("--jni", type=Path, required=True)
     parser.add_argument("--assets", type=Path, required=True)
+    parser.add_argument("--codex", type=Path)
     args = parser.parse_args()
 
     source = Path(__file__).resolve().parent
+    native = source.parent / "codex-phone-probe"
     cache = Path.home() / ".cache/codex/dependencies/nodejs-mobile" / VERSION
     cache.mkdir(parents=True, exist_ok=True)
     archive = fetch(cache, "full.zip", f"{RELEASE}/nodejs-mobile-android-{VERSION}-0.zip", DIGEST)
@@ -56,6 +61,18 @@ def main():
     shutil.copyfile(node_license, licenses / "Node-LICENSE.txt")
     shutil.copyfile(pi_license, licenses / "Pi-LICENSE.txt")
 
+    codex_notice = args.assets / "licenses/codex"
+    if args.codex:
+        verify(args.codex, CODEX_DIGEST)
+        codex_cache = cache.parent.parent / "codex-cli" / CODEX_TAG
+        codex_cache.mkdir(parents=True, exist_ok=True)
+        license_file = fetch(codex_cache, "LICENSE.txt",
+            f"https://raw.githubusercontent.com/openai/codex/{CODEX_TAG}/LICENSE", CODEX_LICENSE_DIGEST)
+        codex_notice.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(license_file, codex_notice / "LICENSE.txt")
+    elif codex_notice.is_dir():
+        shutil.rmtree(codex_notice)
+
     with tempfile.TemporaryDirectory(prefix="sound-pi-") as directory:
         work = Path(directory)
         with zipfile.ZipFile(archive) as package:
@@ -66,10 +83,20 @@ def main():
         shutil.copyfile(node, jni / "libnode.so")
         subprocess.run([
             tools / "aarch64-linux-android26-clang++", "-std=c++20", "-O2", "-fPIC",
-            "-shared", "-Wl,--no-undefined", "-Wl,-z,max-page-size=16384",
-            "-I", work / "include/node", source / "node-jni.cc", node,
-            "-o", jni / "libsound_pi_jni.so",
+            "-Wl,-rpath,$ORIGIN", "-Wl,-z,max-page-size=16384",
+            "-I", work / "include/node", native / "node-main.cc", node,
+            "-o", jni / "libsound_agent_node.so",
         ], check=True)
+        subprocess.run([
+            tools / "aarch64-linux-android26-clang", "-Wall", "-Wextra", "-O2", "-Wl,-z,max-page-size=16384",
+            native / "sandbox.c", "-o", jni / "libsound_agent_sandbox.so",
+        ], check=True)
+        (jni / "libsound_pi_jni.so").unlink(missing_ok=True)
+        codex = jni / "libsound_agent_codex.so"
+        if args.codex:
+            subprocess.run(["zstd", "-q", "-d", "-f", args.codex, "-o", codex], check=True)
+        else:
+            codex.unlink(missing_ok=True)
         shutil.copyfile(
             args.ndk / "toolchains/llvm/prebuilt" / platform_tag /
             "sysroot/usr/lib/aarch64-linux-android/libc++_shared.so",

@@ -1,23 +1,20 @@
-import { chmodSync } from "node:fs";
-import { createServer } from "node:net";
 import { createInterface } from "node:readline";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createAgentManagement } from "./management.mjs";
 import { createRecordingSessions } from "./recording-sessions.mjs";
 
-const socketPath = process.argv[2];
 const sessionCommand = createRecordingSessions();
 
-async function serve(socket) {
-    const lines = createInterface({ input: socket, crlfDelay: Infinity });
+async function serve() {
+    const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
     const input = lines[Symbol.asyncIterator]();
     const abort = new AbortController();
     const send = (value) => {
-        if (!socket.destroyed) socket.write(JSON.stringify(value) + "\n");
+        if (!process.stdout.destroyed) process.stdout.write(JSON.stringify(value) + "\n");
     };
-    socket.on("error", () => lines.close());
-    socket.once("close", () => abort.abort());
+    process.stdin.on("error", () => lines.close());
+    lines.once("close", () => abort.abort());
     let management;
     let client;
     try {
@@ -38,7 +35,7 @@ async function serve(socket) {
             (question, signal, sessionId) => run({ ...request, action: "ask", question, sessionId }, signal),
             (action, scope) => run({ ...request, action, scope }, abort.signal),
         );
-        socket.once("close", management.cancelAll);
+        lines.once("close", management.cancelAll);
         client = new Client({ name: "soundsoftware-android", version: "0.1.0" });
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
         await management.server.connect(serverTransport);
@@ -68,8 +65,8 @@ async function serve(socket) {
         await client?.close();
         await management?.server.close();
         lines.close();
-        socket.end();
+        process.stdin.pause();
     }
 }
 
-createServer((socket) => void serve(socket)).listen(socketPath, () => chmodSync(socketPath, 0o600));
+void serve();

@@ -51,6 +51,7 @@ bash tools/setup-dependencies.sh
 The unsigned APK is at `app/build/outputs/apk/release/app-release-unsigned.apk`. To build a locally signed development APK, run `./gradlew :app:assembleDebug`. To distribute a release, align and sign it with your own Android signing key.
 
 See [building the NPU APK](docs/MODELS.md#build-the-npu-apk) for the release configuration with Qwen3-ASR and speaker acceleration.
+See [building the signed phone release](docs/PHONE_RELEASE_BUILD.md) for the configuration that also bundles both Pi and Codex.
 
 ## License
 

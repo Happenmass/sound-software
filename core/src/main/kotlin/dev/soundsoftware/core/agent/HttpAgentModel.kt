@@ -13,7 +13,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 /** Native Chat Completions tool calls, provider transport isolated from the loop and UI. */
 class HttpAgentModel(private val config: LlmConfig, private val key: String?, client: OkHttpClient = OkHttpClient(),
-    private val onRequestMessages: ((List<AgentMessage>) -> Unit)? = null) : AgentModel {
+    private val onRequestMessages: ((List<AgentMessage>) -> Unit)? = null,
+    private val toolSchemas: JsonArray = AgentToolSchemas.json) : AgentModel {
     private fun message(chinese: String, english: String) = if (config.outputLanguage == "en") english else chinese
     private val client = client.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).readTimeout(0, TimeUnit.MILLISECONDS).followRedirects(false).followSslRedirects(false).build()
     override suspend fun complete(messages: List<AgentMessage>, tools: Boolean): AgentReply =
@@ -33,7 +34,7 @@ class HttpAgentModel(private val config: LlmConfig, private val key: String?, cl
                     put("id", c.id); put("type", "function"); putJsonObject("function") { put("name", c.name); put("arguments", c.arguments) }
                 }) } })
             }) } })
-            if (tools) { put("tools", AgentToolSchemas.json); put("tool_choice", "auto") }
+            if (tools) { put("tools", toolSchemas); put("tool_choice", "auto") }
             if (onDraft != null) {
                 put("stream", true)
                 putJsonObject("stream_options") { put("include_usage", true) }

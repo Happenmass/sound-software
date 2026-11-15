@@ -12,6 +12,7 @@ test("migrates independently scoped history, compacts it, and resets only the se
         })), lastUsage: { totalTokens: 200_000 } };
     const legacyLocal = { id: "recording-old", turns: [{ question: "local question", answer: "local answer" }] };
     const stored = new Map([[null, legacyGlobal], [recording.recordingId, legacyLocal]]);
+    let invalidated = false;
     const calls = [];
     const schema = { function: { name: "search_recordings", description: "Search",
         parameters: { type: "object", properties: {}, additionalProperties: false } } };
@@ -19,9 +20,10 @@ test("migrates independently scoped history, compacts it, and resets only the se
     let host = createRecordingSessions();
     const run = (scope, action, input = {}) => host({ action, scope, schemas: [schema], ...input }, async (kind, payload) => {
         const key = scope.recordingId;
-        if (kind === "storage_read") return { body: structuredClone(stored.get(key)) };
+        if (kind === "storage_read") return { body: structuredClone(stored.get(key)), invalidated: key == null && invalidated };
         if (kind === "storage_write") {
             stored.set(key, structuredClone(payload.body));
+            if (key == null) invalidated = false;
             return;
         }
         if (kind === "model") {
@@ -48,6 +50,10 @@ test("migrates independently scoped history, compacts it, and resets only the se
     assert.match(JSON.stringify(calls[1]), /compacted global/);
     assert.match(JSON.stringify(calls[1]), /old-global-7/);
     assert.doesNotMatch(JSON.stringify(calls), /local question/);
+    invalidated = true;
+    assert.deepEqual((await run(global, "open")).turns, answered.turns);
+    assert.deepEqual(stored.get(null).contextMessages, []);
+    assert.equal(stored.get(null).memory, "");
     const cleared = await run(global, "clear");
     assert.notEqual(cleared.id, opened.id);
     assert.deepEqual(cleared.turns, []);

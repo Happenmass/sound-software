@@ -49,6 +49,7 @@ export function createRecordingSessions({ runLoop = runRecordingLoop } = {}) {
             }
 
             const session = restore(body, invalidated);
+            if (!body && action === "ask" && request.sessionId) session.id = request.sessionId;
             if (!body || body.hostVersion !== VERSION || invalidated) {
                 await bridge("storage_write", { body: session });
             }
@@ -83,7 +84,7 @@ async function answer(session, request, bridge, emit, signal, runLoop) {
     const { question, schemas, language, scope } = request;
     const english = language === "en";
     const label = (zh, en) => english ? en : zh;
-    const system = (english ? systemPrompt.replace("简体中文回答", "英语回答") + "\nAnswer in English." : systemPrompt)
+    const system = (request.systemPrompt ?? (english ? systemPrompt.replace("简体中文回答", "英语回答") + "\nAnswer in English." : systemPrompt))
         + (scope.recordingId == null ? "" : `\n只允许查询当前录音，recordingId=${scope.recordingId}。`)
         + `\n当前时间 ${request.time ?? new Date().toISOString()}。`;
     let messages = [...session.contextMessages, { role: "user", content: question }];
