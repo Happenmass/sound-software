@@ -176,6 +176,10 @@ Magic V6 原签名覆盖 v0.1.12 后，设置页实测仅显示 Pi 和 Codex。�
 
 真实模型复验使用同一独立包名和新建的两条合成录音。`AgentBackendPhoneTest.realModelsUseScopedStdioRecordingMcp` 在 Magic V6 上通过。Pi 经 Chat Completions、Codex 经 Responses 请求真实 `gpt-6.1-sol`，两边的 `tools/list` 均返回五项。Codex 在后续模型请求中按需带上选中的工具。两边在录音 A 的页面通过 `search_recordings` 获得经 Android 核验的 A 引用，再通过 `read_segments` 显式提交 B 的 ID。Android 返回 `recording_scope_denied` 和无证据结果。临时网关经 USB 中转模型请求，并为负向探针补充专用模型提示，使模型实际发出该调用。权限校验在手机上执行。设备正式 v0.1.12 APK 摘要与签名基线一致。
 
+同日从 `main`（`a5b807b`）构建 v0.1.13（versionCode 15），在 Magic V6 上用原发布签名覆盖 v0.1.12。手机 APK 与签名产物的 SHA-256 一致，13 项 ASR 和说话人模型产物与上一版匹配。使用同签名辅助包在正式 APK 里创建隔离录音库和设置，以上真实模型用例在两条合成录音上通过。Pi 和 Codex 都发现五项工具、引用 A 的原文，并在显式传入 B 的 ID 时收到 Android 的 `recording_scope_denied`。
+
+升级前后 18 个 WAV 和 18 份录音元数据的 SHA-256 一致。已有 SQLite 行一致，含 1 个全库会话、3 个单录音会话和 20 条待办。两张新增的助手状态表为空。正式设置逐字节一致，已保存的模型密钥仍可读取。验收结束后已移除辅助包并重新打开正式 App。
+
 ### Pi GUI 项目的桥接
 
 | 项目 | 运行时与 GUI 的桥接 |
