@@ -104,7 +104,7 @@ def main():
         )
 
         for name in ("package.json", "package-lock.json", "android-host.mjs", "management.mjs", "recording-loop.mjs",
-                     "recording-sessions.mjs", "recording-prompts.mjs"):
+                     "recording-sessions.mjs"):
             shutil.copyfile(source / name, work / name)
         subprocess.run(["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=work, check=True)
         for manifest in sorted((work / "node_modules").glob("**/package.json")):

@@ -119,19 +119,17 @@ class MeetingWorkflowTest {
         }
     }
 
-    @Test fun hardwareHighlightsReachSummaryAndAnswerWithoutTrimmingTextOrTrustingThemAsEvidence()=runBlocking {
+    @Test fun hardwareHighlightsReachSummaryWithoutTrimmingTextOrTrustingThemAsEvidence()=runBlocking {
         MockWebServer().use {server->
             server.start()
             val base=recording(listOf(Segment("background","其他完整背景。",0,1000),Segment("s1","王磊负责交互稿，周三前提交。",59000,60000,"p")))
             val marked=base.copy(hardwareHighlights=listOf(RecordingHighlight("device-2951",59020)))
             val evidence=ref("s1","王磊负责交互稿，周三前提交。")
             server.enqueue(response(notes(evidence)));server.enqueue(response(notes(evidence)))
-            server.enqueue(response(buildJsonObject {put("found",true);put("answer","王磊周三前提交交互稿。");put("evidence",buildJsonArray {add(evidence)})}))
             val cache=MemoryCheckpoints();val service=analyzer(server,cache)
             service.summarize(base,SceneTemplate.MEETING,emptyList())
             service.summarize(marked,SceneTemplate.MEETING,emptyList())
-            service.answerGrounded(marked,"我标记的重点是什么？",emptyList())
-            val bodies=(0..2).map {Json.parseToJsonElement(server.takeRequest(2,TimeUnit.SECONDS)!!.body.readUtf8()).jsonObject}
+            val bodies=(0..1).map {Json.parseToJsonElement(server.takeRequest(2,TimeUnit.SECONDS)!!.body.readUtf8()).jsonObject}
             for(body in bodies.drop(1)) {
                 val messages=body["messages"]!!.jsonArray
                 val data=Json.parseToJsonElement(messages[1].jsonObject["content"]!!.jsonPrimitive.content).jsonObject
@@ -142,7 +140,7 @@ class MeetingWorkflowTest {
             }
             assertNotEquals(MeetingAnalyzer.transcriptHash(base),MeetingAnalyzer.transcriptHash(marked))
             assertEquals(MeetingAnalyzer.transcriptHash(base),MeetingAnalyzer.transcriptHash(base.copy(hardwareHighlights=emptyList())))
-            assertEquals(3,bodies.size)
+            assertEquals(2,bodies.size)
         }
     }
     @Test fun hardwareMarkerIdCannotSubstituteForTranscriptEvidence()=runBlocking {
@@ -161,7 +159,7 @@ class MeetingWorkflowTest {
         override suspend fun write(key: String, content: String) { values[key] = content }
     }
 
-    private inner class SourceDispatcher(private val failOnceOn: String? = null, private val question: Boolean = false) : Dispatcher() {
+    private inner class SourceDispatcher(private val failOnceOn: String? = null) : Dispatcher() {
         val textSeen = ConcurrentHashMap<String, String>()
         val calls = ConcurrentHashMap<String, Int>()
         var failed = false
@@ -182,17 +180,12 @@ class MeetingWorkflowTest {
                     failed = true; return MockResponse().setResponseCode(503)
                 }
                 val match = segments.firstOrNull { "中段任务" in it["text"]!!.jsonPrimitive.content }
-                if (question) return response(buildJsonObject {
-                    put("found", match != null); put("answer", if (match != null) "需提交交互稿。" else "逐字稿没有提到相关信息。")
-                    put("evidence", buildJsonArray { if (match != null) add(ref(match["segmentId"]!!.jsonPrimitive.content, "中段任务")) })
-                })
                 val first = segments.first()
                 val reference = ref(first["segmentId"]!!.jsonPrimitive.content, first["text"]!!.jsonPrimitive.content.take(8))
                 val tasks = match?.let { listOf(todo(it["segmentId"]!!.jsonPrimitive.content, "周三前提交交互稿")) }.orEmpty()
                 return response(notes(reference, tasks))
             }
-            val inputs = input[if (question) "answers" else "notes"]!!.jsonArray.map { it.jsonObject }
-            if (question) return response(inputs.first())
+            val inputs = input["notes"]!!.jsonArray.map { it.jsonObject }
             val reference = inputs.first()["abstractEvidence"]!!.jsonArray.first().jsonObject
             val tasks = inputs.flatMap { it["todos"]!!.jsonArray.map { task -> task.jsonObject } }.distinct()
             return response(notes(reference, tasks))
@@ -215,7 +208,7 @@ class MeetingWorkflowTest {
     }
 
     @Test fun completedChunksResumeAndTranscriptChangesInvalidateCache() = runTest {
-        val segments = (0..2).map { Segment("s$it", "背景讨论".repeat(20), it * 1000L, it * 1000L + 900) }
+        val segments = (0..1).map { Segment("s$it", "背景讨论".repeat(20), it * 1000L, it * 1000L + 900) }
         val recording = recording(segments)
         MockWebServer().use { server ->
             val dispatcher = SourceDispatcher(failOnceOn = "s1"); server.dispatcher = dispatcher
@@ -291,31 +284,6 @@ class MeetingWorkflowTest {
         }
     }
 
-    @Test fun answersRequireEvidenceAndUnknownAnswersAreDeterministic() = runTest {
-        MockWebServer().use { server ->
-            server.enqueue(response(buildJsonObject { put("found", false); put("answer", "无依据的编造"); put("evidence", buildJsonArray {}) }))
-            server.enqueue(response(buildJsonObject { put("found", true); put("answer", "周三前提交。"); put("evidence", buildJsonArray { add(ref("s1", "周三前提交")) }) }))
-            val engine = analyzer(server)
-            assertEquals("逐字稿没有提到相关信息。", engine.answer(recording(), "是否谈到价格？", emptyList()))
-            val result = engine.answerGrounded(recording(), "何时提交？", listOf(QaTurn("旧问题", "不可信历史回答", 0, sourceTranscriptHash = MeetingAnalyzer.transcriptHash(recording()))))
-            assertTrue(result.text.contains("00:59")); assertEquals("s1", result.evidence.single().segmentId)
-            val requests = listOf(server.takeRequest(), server.takeRequest())
-            val data = json.parseToJsonElement(requests.last().body.readUtf8()).jsonObject["messages"]!!.jsonArray
-            assertFalse(data[0].jsonObject["content"]!!.jsonPrimitive.content.contains("不可信历史回答"))
-            assertTrue(data[1].jsonObject["content"]!!.jsonPrimitive.content.contains("不可信历史回答"))
-        }
-    }
-
-    @Test fun longQuestionSearchesMiddleInsteadOfOnlyHeadAndTail() = runTest {
-        val segments = (0 until 180).map { i -> Segment("s$i", if (i == 90) "中段任务：周三前提交交互稿。" else "会议背景$i。" + "背景".repeat(220), i * 100L, i * 100L + 90) }
-        MockWebServer().use { server ->
-            val dispatcher = SourceDispatcher(question = true); server.dispatcher = dispatcher
-            val result = analyzer(server).answerGrounded(recording(segments), "要提交什么？", emptyList())
-            assertEquals("s90", result.evidence.single().segmentId)
-            assertEquals(segments.size, dispatcher.textSeen.size)
-        }
-    }
-
     @Test fun truncatedOutputCannotBeSavedAsSuccess() = runTest {
         MockWebServer().use { server ->
             server.enqueue(response(notes(ref("s1", "交互稿")), "length"))
@@ -349,7 +317,7 @@ class MeetingWorkflowTest {
 
     @Test fun oldJsonStillLoadsAndExportsRetainEvidence() {
         val old = json.decodeFromString<Recording>("""{"id":"old","createdAt":0,"durationMs":1000,"summary":{"abstract":"旧摘要","todos":[{"id":"t","text":"旧待办"}]},"qa":[{"question":"q","answer":"a","createdAt":0}]}""")
-        assertTrue(old.summary!!.evidence.isEmpty()); assertTrue(old.qa.single().evidence.isEmpty())
+        assertTrue(old.summary!!.evidence.isEmpty()); assertTrue(old.legacyQa.single().evidence.isEmpty())
         val recording = recording().copy(summary = MeetingSummary(abstract = "交互稿", evidence = mapOf("abstract" to listOf(EvidenceRef("s1", "周三前提交"))),
             chapters = listOf(Chapter(59000, "交付", listOf(EvidenceRef("s1", "王磊负责"))))))
         val text = RecordingExport.markdown(RecordingExport.blocks(recording, "测试", "合成", ExportOptions()))
@@ -371,7 +339,7 @@ class MeetingWorkflowTest {
     }
 
     @Test fun mergeCannotIntroduceAnUnextractedQuoteEvenWhenItExistsInSource() = runTest {
-        val recording = recording((0..2).map { Segment("s$it", "背景讨论".repeat(20), it * 1000L, it * 1000L + 900) })
+        val recording = recording((0..1).map { Segment("s$it", "背景讨论".repeat(20), it * 1000L, it * 1000L + 900) })
         MockWebServer().use { server ->
             server.dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {

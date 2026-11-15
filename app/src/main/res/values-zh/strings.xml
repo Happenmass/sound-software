@@ -561,4 +561,6 @@
     <string name="assistant_url_required">请输入不含凭证、查询参数或片段的 HTTPS Base URL。</string>
     <string name="assistant_pi_model_help">Pi 使用 Chat Completions 接口。Base URL 留空时沿用纪要服务的模型和 API Key。</string>
     <string name="assistant_codex_model_help">Codex 使用 Responses API。请填写接口的 Base URL、模型和 API Key。</string>
+    <string name="assistant_interrupted">上次助手请求已中断。请重新发送问题以继续。</string>
+    <string name="assistant_processing_notification">助手正在处理问题</string>
 </resources>

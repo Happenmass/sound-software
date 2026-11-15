@@ -41,7 +41,9 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
         db.execSQL("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,body TEXT NOT NULL,updated INTEGER NOT NULL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS recording_sessions(recording_id TEXT PRIMARY KEY REFERENCES recordings(id) ON DELETE CASCADE,body TEXT NOT NULL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS assistant_context_invalidated(id INTEGER PRIMARY KEY)")
-        db.version = 3
+        db.execSQL("CREATE TABLE IF NOT EXISTS legacy_qa_migrations(recording_id TEXT PRIMARY KEY REFERENCES recordings(id) ON DELETE CASCADE)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS assistant_runs(scope TEXT PRIMARY KEY,recording_id TEXT REFERENCES recordings(id) ON DELETE CASCADE,session_id TEXT NOT NULL,run_id TEXT NOT NULL,question TEXT NOT NULL,turn_count INTEGER NOT NULL)")
+        db.version = 5
     }
     @Synchronized override fun reconcile(recordings: List<Recording>) = transaction {
         val ids = recordings.map { it.id }.toSet()
@@ -69,10 +71,10 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
     }
     private fun upsertRows(r: Recording) {
         // Exclude progress and chat history: they do not change search data.
-        val projection = json.encodeToString(r.copy(progress=null,stageText=null,qa=emptyList(),error=null))
+        val projection = json.encodeToString(r.copy(progress=null,stageText=null,legacyQa=emptyList(),error=null))
         val known=when {r.hardwareHighlights!=null->1;r.source==RecordingSource.DEVICE->0;else->-1}
         val old = db.rawQuery("SELECT projection,highlights_known FROM recordings WHERE id=?", arrayOf(r.id)).use { if(it.moveToFirst()) it.getString(0) to it.getInt(1) else null }
-        if(old == (projection to known)) return
+        if(old == (projection to known)) { migrateLegacyQa(r); return }
         removeProjectionRows(r.id)
         val revision = MeetingAnalyzer.transcriptHash(r)
         val title = r.title ?: (java.text.SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(r.createdAt) + " 的录音")
@@ -96,7 +98,62 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
             context.forEach {segmentId->db.execSQL("INSERT INTO hardware_highlights VALUES(?,?,?,?)",arrayOf<Any?>(r.id,mark.id,mark.positionMs,segmentId))}
         }
         r.summary?.todos.orEmpty().forEach { t -> db.execSQL("INSERT INTO todos VALUES(?,?,?,?,?,?)", arrayOf<Any?>(r.id,t.id,t.text,t.owner,t.due,if(t.done)1 else 0)) }
+        migrateLegacyQa(r)
     }
+    /** Runs in the projection transaction. Clearing a conversation must not re-import its old JSON. */
+    private fun migrateLegacyQa(recording: Recording) {
+        if (recording.legacyQa.isEmpty()) return
+        val migrated = db.rawQuery("SELECT 1 FROM legacy_qa_migrations WHERE recording_id=?", arrayOf(recording.id))
+            .use { it.moveToFirst() }
+        if (migrated) return
+        val original = readSession(recording.id)?.initializeContext()
+        val turns = recording.legacyQa.map { old ->
+            val refs = old.evidence.map { ref ->
+                RecordingCitation(recording.id, ref.segmentId, ref.quote, old.sourceTranscriptHash.orEmpty(),
+                    title = recording.title.orEmpty())
+            }.map { ref ->
+                val current = recording.transcript?.segments?.firstOrNull { it.id == ref.segmentId }
+                if (ref.revision == MeetingAnalyzer.transcriptHash(recording) && current?.text?.contains(ref.quote) == true)
+                    ref.copy(startMs = current.startMs, speaker = recording.speakerName(current.speakerId)) else ref
+            }
+            AgentTurn(old.question, old.answer, refs, createdAt = old.createdAt)
+        }
+        val session = if (original == null) AgentSession(turns = turns).initializeContext()
+            else original.copy(turns = (turns + original.turns).sortedBy { it.createdAt },
+                firstKeptTurn = turns.size + original.turns.size)
+        db.execSQL("INSERT OR REPLACE INTO recording_sessions VALUES(?,?)", arrayOf(recording.id, json.encodeToString(session)))
+        db.execSQL("INSERT INTO legacy_qa_migrations VALUES(?)", arrayOf(recording.id))
+    }
+
+    private fun scopeKey(recordingId: String?) = recordingId?.let { "recording:$it" } ?: "global"
+
+    suspend fun beginAssistantRun(recordingId: String?, sessionId: String, runId: String, question: String) = withContext(Dispatchers.IO) {
+        synchronized(this@RecordingIndex) {
+            val current = readSession(recordingId)
+            check(current?.id == sessionId) { "The assistant session changed. Reopen it and try again." }
+            db.execSQL("INSERT OR REPLACE INTO assistant_runs VALUES(?,?,?,?,?,?)",
+                arrayOf<Any?>(scopeKey(recordingId), recordingId, sessionId, runId, question, current!!.turns.size))
+        }
+    }
+
+    suspend fun finishAssistantRun(runId: String) = withContext(Dispatchers.IO) {
+        synchronized(this@RecordingIndex) { db.delete("assistant_runs", "run_id=?", arrayOf(runId)); Unit }
+    }
+
+    suspend fun interruptedQuestion(recordingId: String?): String? = withContext(Dispatchers.IO) {
+        synchronized(this@RecordingIndex) {
+            db.rawQuery("SELECT question FROM assistant_runs WHERE scope=?", arrayOf(scopeKey(recordingId)))
+                .use { if (it.moveToFirst()) it.getString(0) else null }
+        }
+    }
+
+    /** Remove the run marker in the same transaction that saves its completed turn. */
+    private fun commitRun(recordingId: String?, body: JsonObject, reset: Boolean) {
+        if (reset) db.delete("assistant_runs", "scope=?", arrayOf(scopeKey(recordingId)))
+        else db.execSQL("DELETE FROM assistant_runs WHERE scope=? AND session_id=? AND turn_count<?",
+            arrayOf<Any?>(scopeKey(recordingId), body.getValue("id").jsonPrimitive.content, body["turns"]?.jsonArray?.size ?: 0))
+    }
+
     suspend fun saveSession(s: AgentSession, recordingId: String? = null, expectedGeneration: Long? = null) = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) {
         check(expectedGeneration == null || corpusGeneration == expectedGeneration) { "The recording library changed. Please ask again." }
         if (recordingId == null) saveGlobal(s)
@@ -157,6 +214,7 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
         synchronized(this@RecordingIndex) {
             check(corpusGeneration == generation) { "The recording library changed. Please ask again." }
             transaction {
+                commitRun(recordingId, body, reset)
                 if (recordingId == null) {
                     if (reset) db.delete("sessions", null, null)
                     db.execSQL("INSERT OR REPLACE INTO sessions VALUES(?,?,?)", arrayOf<Any?>(body.getValue("id").jsonPrimitive.content, body.toString(), System.currentTimeMillis()))
@@ -169,6 +227,7 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
     }
     suspend fun clearSessions(recordingId: String? = null) = withContext(Dispatchers.IO) {
         synchronized(this@RecordingIndex) {
+            db.delete("assistant_runs", "scope=?", arrayOf(scopeKey(recordingId)))
             if (recordingId == null) {
                 db.delete("sessions", null, null)
                 db.delete("assistant_context_invalidated", null, null)

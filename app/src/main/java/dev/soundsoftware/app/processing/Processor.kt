@@ -56,7 +56,6 @@ class Processor(
     @Volatile private var current: Pair<String, Job>? = null
     private val summaryRequests = ConcurrentHashMap<String, String>()
     private val manualSummaryJobs = ConcurrentHashMap<String, Job>()
-    private val answerJobs = ConcurrentHashMap<String, MutableSet<Job>>()
     private val discardedAnalysisIds = ConcurrentHashMap.newKeySet<String>()
     private val diarizationExecution = kotlinx.coroutines.sync.Mutex()
     private val speakerJobs = ConcurrentHashMap<String, Job>()
@@ -181,7 +180,7 @@ class Processor(
             val transcript = Transcript(segments, result.provenance.model, result.provenance.backend, result.timestampQuality.name,
                 System.currentTimeMillis(), warnings + result.warnings, speakerHtpExecutions)
             val wantsSummary = options.template != SceneTemplate.TRANSCRIPT_ONLY && llmReady()
-            val saved = repository.update(id) { it.copy(transcript = transcript, speakers = speakers, summary = null, qa = emptyList(),
+            val saved = repository.update(id) { it.copy(transcript = transcript, speakers = speakers, summary = null,
                 stage = if (wantsSummary) ProcessingStage.SUMMARIZING else ProcessingStage.DONE,
                 progress = null, stageText = if (wantsSummary) settings.text(R.string.generate_notes) else null) } ?: return
             if (wantsSummary) summarizeNow(saved, options)
@@ -335,33 +334,13 @@ class Processor(
         return job
     }
 
-    suspend fun ask(id: String, question: String): Result<Unit> {
-        val job = currentCoroutineContext().job
-        val jobs = answerJobs.computeIfAbsent(id) { ConcurrentHashMap.newKeySet() }
-        jobs += job
-        return try {
-            check(id !in discardedAnalysisIds) { settings.text(R.string.recording_deleting) }
-            val recording = repository.get(id) ?: error(settings.text(R.string.recording_missing))
-            val answer = analyzer().answerGrounded(recording, question, recording.qa)
-            repository.update(id) {
-                SummaryCommit.requireTranscript(it, answer.sourceTranscriptHash)
-                it.copy(qa = it.qa + QaTurn(question, answer.text, System.currentTimeMillis(), answer.evidence, answer.sourceTranscriptHash))
-            }
-            Result.success(Unit)
-        } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
-        finally {
-            jobs -= job
-            if (jobs.isEmpty()) answerJobs.remove(id, jobs)
-        }
-    }
-
     /** Hold the admission guard through deletion; invalidate queued work without banning a later re-sync. */
     suspend fun deleteRecording(id: String) {
         if (!discardedAnalysisIds.add(id)) return
         generations.merge(id, 1L) { previous, one -> previous + one }
         try {
             summaryRequests.remove(id)
-            val jobs = (listOfNotNull(current?.takeIf { it.first == id }?.second, manualSummaryJobs.remove(id), speakerJobs.remove(id)) + answerJobs.remove(id).orEmpty()).distinct()
+            val jobs = (listOfNotNull(current?.takeIf { it.first == id }?.second, manualSummaryJobs.remove(id), speakerJobs.remove(id))).distinct()
             jobs.forEach { it.cancel() }
             jobs.forEach { it.join() }
             withContext(Dispatchers.IO) { analysisDirectory(id).deleteRecursively() }

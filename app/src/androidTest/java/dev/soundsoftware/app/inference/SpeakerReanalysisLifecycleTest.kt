@@ -4,6 +4,7 @@ import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.soundsoftware.app.data.*
+import dev.soundsoftware.app.R
 import dev.soundsoftware.app.processing.Processor
 import dev.soundsoftware.core.audio.PcmWav
 import dev.soundsoftware.core.model.*
@@ -51,12 +52,12 @@ class SpeakerReanalysisLifecycleTest {
         fake.block=true;val job=processor.rediarize("r",null);fake.entered.await()
         repo.update("r"){r->r.copy(transcript=r.transcript!!.copy(segments=r.transcript!!.segments.map{it.copy(text="并发修改")}))}
         fake.release.complete(Unit);job.join()
-        assertEquals("并发修改",repo.get("r")!!.transcript!!.segments.single().text);assertTrue(repo.get("r")!!.error!!.startsWith("说话人重新计算"))
+        assertEquals("并发修改",repo.get("r")!!.transcript!!.segments.single().text);assertTrue(repo.get("r")!!.error!!.startsWith(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.speaker_reanalysis_failed, "")))
     }}
     @Test fun emptyAnalysisDoesNotEraseExistingAssignments()=runBlocking {fixture {processor,repo,fake->
         val before=repo.get("r")!!;fake.empty=true;processor.rediarize("r",null).join()
         assertEquals(before.transcript,repo.get("r")!!.transcript);assertEquals(before.summary,repo.get("r")!!.summary);assertNull(repo.get("r")!!.speakerAnalysis)
-        assertTrue(repo.get("r")!!.error!!.contains("原结果已保留"))
+        assertEquals(InstrumentationRegistry.getInstrumentation().targetContext.let { it.getString(R.string.speaker_reanalysis_failed, it.getString(R.string.no_speech_to_analyze)) }, repo.get("r")!!.error)
     }}
     @Test fun rejectedRequestDoesNotMarkAnotherProcessingStageAsDone()=runBlocking {fixture {processor,repo,fake->
         for (stage in listOf(ProcessingStage.QUEUED,ProcessingStage.DIARIZING,ProcessingStage.TRANSCRIBING,ProcessingStage.SUMMARIZING)) {

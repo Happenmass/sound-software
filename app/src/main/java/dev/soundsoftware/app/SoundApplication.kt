@@ -82,8 +82,8 @@ class SoundApplication : Application() {
             repository.load()
             assistant.load()
             processor.start()
-            combine(processor.busy, devices.state, activityVisible, autoSyncRequested) { busy, device, visible, autoSync ->
-                busy || device.sync.running || (visible && autoSync)
+            combine(processor.busy, devices.state, activityVisible, autoSyncRequested, assistant.busy) { busy, device, visible, autoSync, agentBusy ->
+                busy || agentBusy || device.sync.running || (visible && autoSync)
             }.distinctUntilChanged().collect { needed ->
                 if (needed && !workServiceActive) {
                     runCatching { startForegroundService(Intent(this@SoundApplication, WorkService::class.java)) }
@@ -142,14 +142,14 @@ class WorkService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val device = app.devices.state.value
-        val initial = work(app.processor.busy.value, device.sync, device.phase, app.autoSyncRequested.value)
+        val initial = work(app.processor.busy.value, device.sync, device.phase, app.autoSyncRequested.value, app.assistant.busy.value)
         promote(initial)
         app.workServiceActive = true
         watch?.cancel()
         var displayed = initial
         watch = app.scope.launch {
-            combine(app.processor.busy, app.devices.state, app.autoSyncRequested) { processing, state, monitoring ->
-                work(processing, state.sync, state.phase, monitoring)
+            combine(app.processor.busy, app.devices.state, app.autoSyncRequested, app.assistant.busy) { processing, state, monitoring, agentBusy ->
+                work(processing, state.sync, state.phase, monitoring, agentBusy)
             }.distinctUntilChanged().collect { current ->
                 if (!current.needed) {
                     app.devices.setBackgroundSyncActive(false)
@@ -169,11 +169,12 @@ class WorkService : Service() {
 
     private data class Work(val needed: Boolean, val monitoring: Boolean, val type: Int, val text: String, val openSync: Boolean)
 
-    private fun work(processing: Boolean, sync: SyncState, phase: LinkPhase, monitoring: Boolean): Work {
+    private fun work(processing: Boolean, sync: SyncState, phase: LinkPhase, monitoring: Boolean, agentBusy: Boolean): Work {
         var type = 0
         if (monitoring || sync.running) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         if (processing) type = type or if (Build.VERSION.SDK_INT >= 35) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
             else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        if (agentBusy) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         // A start request can arrive just as the last task ends. Still satisfy Android's
         // foreground-start contract before stopping the service in the collector.
         if (type == 0) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -181,11 +182,12 @@ class WorkService : Service() {
             sync.running && sync.automatic -> getString(R.string.auto_sync_using, getString(sync.transport.labelRes))
             sync.running -> getString(R.string.syncing_recordings)
             monitoring && sync.automatic && sync.error != null -> getString(R.string.auto_sync_failed_notification)
+            agentBusy -> getString(R.string.assistant_processing_notification)
             processing -> getString(R.string.processing_notification)
             monitoring && phase != LinkPhase.CONNECTED -> getString(R.string.waiting_for_device)
             else -> getString(R.string.waiting_for_recording)
         }
-        return Work(monitoring || sync.running || processing, monitoring, type, text, monitoring || sync.running)
+        return Work(monitoring || sync.running || processing || agentBusy, monitoring, type, text, monitoring || sync.running)
     }
 
     private fun promote(work: Work) {

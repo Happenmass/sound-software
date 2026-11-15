@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { runRecordingLoop } from "./recording-loop.mjs";
-import { compactionPrompt, systemPrompt } from "./recording-prompts.mjs";
 
 const VERSION = 1;
 const COMPACT_AT = 200_000;
@@ -68,14 +67,13 @@ export function createRecordingSessions({ runLoop = runRecordingLoop } = {}) {
 
 function retainedStart(messages) {
     let start = Math.max(0, messages.length - KEEP_RECENT);
-    if (messages[start]?.role === "tool") {
-        const ids = new Set(messages.slice(start).filter((message) => message.role === "tool").map((message) => message.toolCallId));
-        for (let i = start - 1; i >= 0; i--) {
-            if (messages[i].calls?.some((call) => ids.has(call.id))) {
-                start = i;
-                break;
-            }
-        }
+    while (start > 0) {
+        const tail = messages.slice(start);
+        const parents = new Set(tail.flatMap((m) => m.calls ?? []).map((c) => c.id));
+        const missing = new Set(tail.filter((m) => m.role === "tool" && !parents.has(m.toolCallId)).map((m) => m.toolCallId));
+        const parent = messages.slice(0, start).findIndex((m) => m.calls?.some((c) => missing.has(c.id)));
+        if (parent < 0) break;
+        start = parent;
     }
     return start;
 }
@@ -84,7 +82,8 @@ async function answer(session, request, bridge, emit, signal, runLoop) {
     const { question, schemas, language, scope } = request;
     const english = language === "en";
     const label = (zh, en) => english ? en : zh;
-    const system = (request.systemPrompt ?? (english ? systemPrompt.replace("简体中文回答", "英语回答") + "\nAnswer in English." : systemPrompt))
+    if (!request.systemPrompt || !request.compactionPrompt) throw new Error("The host must supply assistant prompts");
+    const system = (english ? request.systemPrompt.replace("简体中文回答", "英语回答") + "\nAnswer in English." : request.systemPrompt)
         + (scope.recordingId == null ? "" : `\n只允许查询当前录音，recordingId=${scope.recordingId}。`)
         + `\n当前时间 ${request.time ?? new Date().toISOString()}。`;
     let messages = [...session.contextMessages, { role: "user", content: question }];
@@ -120,7 +119,7 @@ async function answer(session, request, bridge, emit, signal, runLoop) {
         if (cut === 0) return;
         await step("compact", label("压缩上下文", "Compact context"), {}, async () => {
             const reply = await bridge("model", { tools: false, messages: [
-                { role: "system", content: compactionPrompt },
+                { role: "system", content: request.compactionPrompt },
                 { role: "user", content: JSON.stringify({
                     previousSummary: memory, currentQuestion: question, messages: messages.slice(0, cut),
                 }) },
@@ -182,5 +181,5 @@ async function answer(session, request, bridge, emit, signal, runLoop) {
     }) };
     await compact();
     return { ...session, turns: [...session.turns, { question, ...checked, trace, createdAt: Date.now() }],
-        contextMessages: messages, memory, compactions, lastUsage: usage };
+        contextMessages: messages, contextInitialized: true, firstKeptTurn: session.turns.length + 1, memory, compactions, lastUsage: usage };
 }

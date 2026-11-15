@@ -52,6 +52,8 @@ bash tools/setup-dependencies.sh
 
 启用 Qwen3-ASR NPU 转写和声纹加速的发布构建命令见[构建说明](docs/MODELS.md#build-the-npu-apk)。
 
+默认源码构建不打包助手运行时。启用 Pi 需加 `-PincludePi=true`，启用 Codex 还需指定 `-PcodexArchive=/absolute/path/to/codex-aarch64-unknown-linux-musl.zst`；设备需支持 Landlock ABI 6。完整参数见[手机发布构建](docs/PHONE_RELEASE_BUILD.md)。
+
 ## 许可证
 
 项目原创源码采用 [Apache-2.0](LICENSE)。第三方组件见 [NOTICE](NOTICE) 和[许可文件](app/src/main/assets/licenses/)。随包模型权重和高通运行库遵循各自的上游条款。本项目独立于 Anker 和 soundcore。

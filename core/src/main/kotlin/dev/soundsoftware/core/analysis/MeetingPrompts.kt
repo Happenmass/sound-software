@@ -48,12 +48,4 @@ chapters：数组，元素为{"title":"议题","evidence":[...]}；首个引用�
 不要输出上述字段以外的字段。无依据时title和abstract可为空，但非空abstract必须有abstractEvidence。
 """
 
-    fun answer(merge: Boolean): String = GROUNDING + """
-
-回答当前问题。历史问答仅用于理解代词和上下文，不是事实证据，必须回到本次逐字稿引用。
-""" + (if (merge) "合并分段答案，只使用给出的支持材料及引用，去掉重复，不增加新结论。本步骤引用须原样复制输入的完整segmentId和quote对象。\n" else "检查当前块是否有能回答问题的材料。\n") + """
-仅输出found、answer、evidence三个字段。例如{"found":true,"answer":"简洁回答","evidence":[{"segmentId":"原段ID"}]}；归并时evidence保留输入的quote。
-没有依据时输出{"found":false,"answer":"逐字稿没有提到相关信息。","evidence":[]}。
-found为true必须有证据；found为false不得编写其他猜测或根据历史回答作答。
-"""
 }

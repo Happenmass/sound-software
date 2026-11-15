@@ -561,4 +561,6 @@
     <string name="assistant_url_required">Enter an HTTPS base URL without credentials, query parameters, or fragments.</string>
     <string name="assistant_pi_model_help">Pi uses a Chat Completions endpoint. Leave Base URL blank to use the model and key from Notes service.</string>
     <string name="assistant_codex_model_help">Codex uses a Responses API endpoint. Enter its base URL, model, and API key.</string>
+    <string name="assistant_interrupted">The last assistant request was interrupted. Send your question again to continue.</string>
+    <string name="assistant_processing_notification">Assistant is working</string>
 </resources>

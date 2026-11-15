@@ -34,7 +34,8 @@ class PiAgentLoop(private val sandbox: AgentSandbox) {
                 question?.let { put("question", it) }
                 if (action == "ask") {
                     put("schemas", if (workspace != null) NodeWorkspaceTool.schemas else AgentToolSchemas.json)
-                    if (workspace != null) put("systemPrompt", NodeWorkspaceTool.prompt(language))
+                    put("systemPrompt", workspace?.let { NodeWorkspaceTool.prompt(language) } ?: AgentPrompts.SYSTEM)
+                    put("compactionPrompt", AgentPrompts.COMPACT)
                     put("language", language)
                     put("time", ZonedDateTime.now().toString())
                 }

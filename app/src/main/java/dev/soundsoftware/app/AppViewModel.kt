@@ -60,8 +60,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val tab = mutableTab.asStateFlow()
     private val mutableMessage = MutableStateFlow<String?>(null)
     val message = mutableMessage.asStateFlow()
-    private val mutableAsking = MutableStateFlow(false)
-    val asking = mutableAsking.asStateFlow()
     fun assistantState(recordingId: String?) = app.assistant.stateFor(recordingId)
     fun askAssistant(question: String, recordingId: String?) = app.assistant.ask(question, recordingId)
     fun cancelAssistant(recordingId: String?, runId: String?) = app.assistant.cancel(recordingId, runId)
@@ -121,12 +119,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun recalculateSpeakers(id: String, count: Int?) = app.processor.rediarize(id,count)
     fun cancelTranscription(id: String) = app.processor.cancel(id)
     fun resummarize(id: String, template: SceneTemplate) = app.processor.resummarize(id, template)
-    fun ask(id: String, question: String) = viewModelScope.launch {
-        mutableAsking.value = true
-        try { app.processor.ask(id, question).onFailure { say(it.message ?: app.getString(R.string.qa_failed)) } }
-        finally { mutableAsking.value = false }
-    }
-
     // ---- Recording edits ----
     private fun edit(id: String, transform: (Recording) -> Recording) = viewModelScope.launch { app.repository.update(id, transform) }
     fun rename(id: String, title: String) = edit(id) { it.copy(title = title.trim().ifEmpty { null }, titleEditedByUser = title.isNotBlank()) }

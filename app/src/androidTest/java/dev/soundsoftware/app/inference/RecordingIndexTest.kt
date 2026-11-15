@@ -211,75 +211,32 @@ class RecordingIndexTest {
             assertEquals(1,reopened.execute("list_todos",buildJsonObject {})["items"]!!.jsonArray.size)
         }
     }}
-    @Test fun actualIndexBackedLoopComparesTwoMeetingsWithEvidence()=runBlocking {fixture{index,_->
+    @Test fun indexEvidenceVerifiesAcrossMeetings()=runBlocking {fixture{index,_->
         index.upsert(recording("a","上线安排周五",1000));index.upsert(recording("b","上线改为周一",2000))
-        var step=0;val model=object:AgentModel{override suspend fun complete(messages:List<AgentMessage>,tools:Boolean):AgentReply {
-            if(step++==0)return AgentReply(calls=listOf(ToolCall("find","search_recordings",buildJsonObject{put("query","上线")})))
-            val refs=Json.parseToJsonElement(messages.last().content).jsonObject.getValue("evidence")
-            return AgentReply(buildJsonObject{put("found",true);put("answer","上线从周五改为周一。");put("citations",refs)}.toString())
-        }}
-        val result=RecordingAgent(model,index).ask(AgentSession(),"比较上线安排");assertEquals(setOf("a","b"),result.turn.citations.map{it.recordingId}.toSet())
+        val refs=index.execute("search_recordings",buildJsonObject {put("query","上线")}).getValue("evidence")
+        val receipts=Json.decodeFromJsonElement<List<RecordingCitation>>(refs).toSet()
+        val checked=verifyRecordingAnswer(buildJsonObject {put("found",true);put("answer","上线从周五改为周一。");put("citations",refs)}.toString(),receipts,index,"zh")
+        assertEquals(setOf("a","b"),checked.citations.map {it.recordingId}.toSet())
     }}
-    @Test fun longIndexBackedQueryReadsEveryPageBeyondOldLimitsAndPersistsAnswer()=runBlocking {fixture{index,dir->
+    @Test fun paginatedEvidenceAndLongAnswerSurviveSQLiteReopen()=runBlocking {fixture{index,dir->
         val segments=(0 until 60).map {i->Segment("s$i","第${i}段核验资料。"+"讨论背景".repeat(40),i*1000L,(i+1)*1000L,"p")}
-        val answer = segments.joinToString("\n") { it.text }
-        val question = "完整读取全部录音资料，逐项核对原文。".repeat(160)
+        val answer=segments.joinToString("\n") {it.text}
         index.upsert(recording().copy(durationMs=60000,transcript=recording().transcript!!.copy(segments=segments)))
-        val evidence=mutableListOf<JsonElement>();var calls=0;var requests=0;var offset=0
-        val realTools=object:RecordingTools {
-            override suspend fun execute(name:String,arguments:JsonObject):JsonObject {
-                calls++;return index.execute(name,arguments).also {evidence.addAll(it.getValue("evidence").jsonArray)}
-            }
-            override suspend fun resolve(ref:RecordingCitation)=index.resolve(ref)
-        }
-        val model=object:AgentModel {
-            override suspend fun complete(messages:List<AgentMessage>,tools:Boolean):AgentReply {
-                requests++
-                assertEquals(question, messages.last { it.role == "user" }.content)
-                if(offset<60) {
-                    val batch=if(offset==0)9 else 1
-                    return AgentReply(calls=(0 until batch).map {
-                        val page=offset++
-                        ToolCall("page-$page","read_segments",buildJsonObject {put("recordingId","a");put("limit",1);put("offset",page)})
-                    })
-                }
-                return AgentReply(buildJsonObject {
-                    put("found",true);put("answer",answer)
-                    val invalid = JsonObject(evidence.first().jsonObject + ("quote" to JsonPrimitive("不存在的引用")))
-                    put("citations",JsonArray(evidence + invalid))
-                }.toString())
-            }
-        }
-        val result=RecordingAgent(model,realTools).ask(AgentSession(),question)
-        assertEquals(60,calls);assertEquals(53,requests)
-        assertEquals(segments.map {it.id}.toSet(),evidence.map {it.jsonObject.getValue("segmentId").jsonPrimitive.content}.toSet())
-        assertEquals(answer,result.turn.answer)
-        assertEquals(segments.map {it.id},result.turn.citations.map {it.segmentId})
-        assertTrue(result.turn.evidenceWarning.orEmpty().contains("1 条引用未通过"))
-        assertEquals(60,result.turn.steps.size)
-        index.saveSession(result.session)
-        RecordingIndex(File(dir,"index.db")).use { reopened -> assertEquals(result.session,reopened.latestSession()) }
+        val evidence=(0 until 60).flatMap {offset->index.execute("read_segments",buildJsonObject {put("recordingId","a");put("limit",1);put("offset",offset)}).getValue("evidence").jsonArray}
+        val invalid=JsonObject(evidence.first().jsonObject+("quote" to JsonPrimitive("不存在的引用")))
+        val checked=verifyRecordingAnswer(buildJsonObject {put("found",true);put("answer",answer);put("citations",JsonArray(evidence+invalid))}.toString(),Json.decodeFromJsonElement<List<RecordingCitation>>(JsonArray(evidence)).toSet(),index,"zh")
+        assertEquals(segments.map {it.id},checked.citations.map {it.segmentId})
+        assertEquals(answer,checked.answer);assertNotNull(checked.evidenceWarning)
+        val session=AgentSession(turns=listOf(AgentTurn("全部资料",checked.answer,checked.citations))).initializeContext()
+        index.saveSession(session)
+        RecordingIndex(File(dir,"index.db")).use {assertEquals(session,it.latestSession())}
     }}
-    @Test fun tokenCompactedSummaryContextAndUsageSurviveSQLiteReopen()=runBlocking {fixture{index,dir->
-        index.upsert(recording())
-        var round=0;var summaries=0
-        val model=object:AgentModel {
-            override suspend fun complete(messages:List<AgentMessage>,tools:Boolean):AgentReply {
-                if(!tools) {summaries++;return AgentReply("""{"summary":"保留项目目标、a录音来源及未完成核验事项"}""",usage=AgentUsage(200000,500))}
-                if(round++==0)return AgentReply(calls=listOf(ToolCall("read","read_segments",buildJsonObject {put("recordingId","a")})),usage=AgentUsage(199900,100))
-                val refs=Json.parseToJsonElement(messages.last().content).jsonObject.getValue("evidence")
-                return AgentReply(buildJsonObject {put("found",true);put("answer","上线安排已核对原文。");put("citations",refs)}.toString(),usage=AgentUsage(1900,100))
-            }
-        }
-        val original=AgentSession(turns=(0 until 4).map {AgentTurn("旧问题$it","旧回答$it")})
-        val out=RecordingAgent(model,index).ask(original,"继续核对上线")
-        assertEquals(1,summaries);assertEquals(5,out.session.turns.size)
-        assertTrue(out.session.contextInitialized);assertEquals(6,out.session.contextMessages.size)
-        assertEquals(2000L,out.session.lastUsage?.totalTokens)
-        index.saveSession(out.session)
-        RecordingIndex(File(dir,"index.db")).use {reopened->
-            assertEquals(out.session,reopened.latestSession())
-            assertEquals(original.turns,reopened.latestSession()!!.turns.take(4))
-        }
+    @Test fun compactedContextAndUsageSurviveSQLiteReopen()=runBlocking {fixture{index,dir->
+        val original=AgentSession(turns=(0 until 5).map {AgentTurn("旧问题$it","旧回答$it")},lastUsage=AgentUsage(200000,0))
+        val compacted=original.compactContext("继续") {AgentReply("""{"summary":"项目目标与分页进度"}""")}
+        assertEquals(1,compacted.compactions);assertEquals(5,compacted.contextMessages.size);assertNull(compacted.lastUsage)
+        val saved=compacted.copy(lastUsage=AgentUsage(1900,100))
+        index.saveSession(saved)
+        RecordingIndex(File(dir,"index.db")).use {assertEquals(saved,it.latestSession());assertEquals(original.turns,it.latestSession()!!.turns)}
     }}
 }

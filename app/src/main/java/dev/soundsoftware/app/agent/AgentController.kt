@@ -62,6 +62,8 @@ class AgentController(
     private val httpClient: okhttp3.OkHttpClient = okhttp3.OkHttpClient(),
 ) {
     private val activeTurn = Mutex()
+    private val activeRuns = MutableStateFlow<Set<String>>(emptySet())
+    val busy = activeRuns.map { it.isNotEmpty() }.stateIn(scope, SharingStarted.Eagerly, false)
     private val pi = PiAgentLoop(sandbox)
     private val codex = CodexAgentLoop(sandbox, index, httpClient)
 
@@ -103,7 +105,9 @@ class AgentController(
         val session = (index.latestSession(recordingId) ?: AgentSession().also {
             index.writeAssistantBody(recordingId, generation, Json.encodeToJsonElement(it).jsonObject, reset = false)
         }).snapshot()
-        slot.state.value = AssistantState(session = session, ready = true, contextUsage = session.lastUsage)
+        val interrupted = index.interruptedQuestion(recordingId)
+        slot.state.value = AssistantState(session = session, ready = true, contextUsage = session.lastUsage,
+            pendingQuestion = interrupted, error = interrupted?.let { settings.text(R.string.assistant_interrupted) })
     }
 
     fun ask(question: String, recordingId: String? = null) {
@@ -132,8 +136,10 @@ class AgentController(
             updates.tryEmit(AssistantUpdate(sessionId, runId, event))
         }
         publish(AssistantEvent.Started(question))
-        slot.job = scope.launch {
+        activeRuns.update { it + runId }
+        slot.job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
+                index.beginAssistantRun(recordingId, sessionId, runId, question)
                 val profile = settings.state.value
                 val selected = profile.assistantBackend
                 val language = settings.outputLanguage()
@@ -174,6 +180,9 @@ class AgentController(
                 throw error
             } catch (error: Exception) {
                 publish(AssistantEvent.Failed(error.message ?: settings.text(R.string.assistant_failed)))
+            } finally {
+                try { withContext(NonCancellable) { index.finishAssistantRun(runId) } }
+                finally { activeRuns.update { it - runId } }
             }
         }
     }

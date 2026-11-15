@@ -24,7 +24,9 @@ data class Recording(
     val transcript: Transcript? = null,
     val speakers: List<Speaker> = emptyList(),
     val summary: MeetingSummary? = null,
-    val qa: List<QaTurn> = emptyList(),
+    /** Read-only pre-Agent history; migrated once to SQLite, retained for data recovery. */
+    @kotlinx.serialization.SerialName("qa")
+    val legacyQa: List<LegacyQaTurn> = emptyList(),
     val speakerAnalysis: SpeakerAnalysis? = null,
     /** null: legacy/not yet read or unsupported firmware; empty: verified, no hardware highlights. */
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
@@ -126,7 +128,7 @@ data class TodoItem(val id: String, val text: String, val owner: String? = null,
 data class Chapter(val startMs: Long, val title: String, val evidence: List<EvidenceRef> = emptyList())
 
 @Serializable
-data class QaTurn(val question: String, val answer: String, val createdAt: Long,
+data class LegacyQaTurn(val question: String, val answer: String, val createdAt: Long,
     val evidence: List<EvidenceRef> = emptyList(), val sourceTranscriptHash: String = "")
 
 fun Recording.speakerName(id: String?): String? = speakers.firstOrNull { it.id == id }?.displayName

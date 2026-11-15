@@ -35,16 +35,16 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
         withContext(Dispatchers.IO) {
             val generation = index.corpusGeneration
             val stored = index.readAssistantBody(recordingId, generation)
-            val session = stored["body"]?.takeUnless { it == JsonNull }?.let { json.decodeFromJsonElement<AgentSession>(it) }
+            val saved = stored["body"]?.takeUnless { it == JsonNull }?.let { json.decodeFromJsonElement<AgentSession>(it) }
                 ?: AgentSession(id = sessionId)
-            check(session.id == sessionId) { "The recording session changed. Reopen it and try again." }
-            val invalidated = stored.getValue("invalidated").jsonPrimitive.boolean
+            check(saved.id == sessionId) { "The recording session changed. Reopen it and try again." }
+            var session = saved.initializeContext(stored.getValue("invalidated").jsonPrimitive.boolean)
             val tools = index.toolsFor(recordingId)
             val receipts = linkedSetOf<RecordingCitation>()
             val trace = mutableListOf<AgentTraceStep>()
             val workspace = question.takeIf(NodeWorkspaceTool::requested)?.let { NodeWorkspaceTool(sandbox, recordingId) }
             val catalog = modelCatalog(recordingId)
-            val answer = CodexModelRelay(base, apiKey, httpClient).use { relay ->
+            val next = CodexModelRelay(base, apiKey, httpClient).use { relay ->
                 val args = listOf(
                     "-c", "model_provider=\"sound\"",
                     "-c", "model_providers.sound.name=\"Sound Software\"",
@@ -58,48 +58,71 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
                     "--disable", "incremental_tools",
                     "app-server", "--listen", "stdio://",
                 )
-                sandbox.start(sandbox.codex, args, recordingId, relay.port) { work ->
+                suspend fun execute(input: String, instructions: String, schemas: JsonArray,
+                    events: (AssistantEvent) -> Unit = onEvent,
+                    tool: suspend (String, String, JsonObject) -> JsonObject = { _, _, _ -> error("No tools in compaction") },
+                ): AgentReply = sandbox.start(sandbox.codex, args, recordingId, relay.port) { work ->
                     File(work, "models.json").writeText(catalog)
-                }.use { child ->
-                    runTurn(child, model, recordingId, session, invalidated, question, language, workspace != null, onEvent) { name, arguments ->
-                        check(index.corpusGeneration == generation) { "The recording library changed. Please ask again." }
-                        val initial = AgentTraceStep(id = trace.size, kind = "tool", title = name,
-                            toolName = name, arguments = arguments.toString())
-                        trace += initial
-                        onEvent(AssistantEvent.ToolProgress(initial))
-                        val started = System.nanoTime()
-                        val result = try {
-                            if (workspace != null) workspace.execute(name, arguments) else tools.execute(name, arguments)
-                        } catch (error: CancellationException) {
-                            throw error
-                        } catch (_: Exception) {
-                            buildJsonObject { put("error", "Invalid recording tool or arguments") }
-                        }
-                        (result["evidence"] as? JsonArray)?.forEach {
-                            receipts += json.decodeFromJsonElement<RecordingCitation>(it)
-                        }
-                        val step = initial.copy(status = if ("error" in result) "failed" else "done",
-                            elapsedMs = (System.nanoTime() - started) / 1_000_000, result = result.toString())
-                        trace[step.id] = step
-                        onEvent(AssistantEvent.ToolProgress(step))
-                        result
-                    }
+                }.use { child -> runTurn(child, model, input, instructions, schemas, events, tool) }
+
+                suspend fun compact(candidate: AgentSession): AgentSession = candidate.compactContext(question) { messages ->
+                    check(index.corpusGeneration == generation) { "The recording library changed. Please ask again." }
+                    val step = AgentTraceStep(trace.size, "compact", if (language == "en") "Compact context" else "压缩上下文")
+                    trace += step
+                    onEvent(AssistantEvent.ToolProgress(step))
+                    val reply = execute(messages.last().content, messages.first().content, JsonArray(emptyList()), events = {})
+                    trace[step.id] = step.copy(status = "done")
+                    onEvent(AssistantEvent.ToolProgress(trace[step.id]))
+                    onEvent(AssistantEvent.Usage(null))
+                    reply
                 }
+
+                session = compact(session)
+                val messages = mutableListOf<AgentMessage>()
+                val prompt = if (language == "en") AgentPrompts.SYSTEM.replace("简体中文回答", "英语回答") +
+                    "\nAnswer in English. Preserve all source quotations verbatim." else AgentPrompts.SYSTEM
+                val boundary = recordingId?.let { "\nOnly query the current recording, whose recordingId is $it." }.orEmpty()
+                val instructions = (workspace?.let { NodeWorkspaceTool.prompt(language) } ?: (prompt + boundary)) +
+                    "\nCurrent time: " + java.time.ZonedDateTime.now()
+                val reply = execute(session.codexInput(question), instructions,
+                    if (workspace != null) NodeWorkspaceTool.schemas else AgentToolSchemas.json) { callId, name, arguments ->
+                    check(index.corpusGeneration == generation) { "The recording library changed. Please ask again." }
+                    val initial = AgentTraceStep(id = trace.size, kind = "tool", title = name,
+                        toolName = name, arguments = arguments.toString())
+                    trace += initial
+                    onEvent(AssistantEvent.ToolProgress(initial))
+                    val started = System.nanoTime()
+                    val result = try {
+                        if (workspace != null) workspace.execute(name, arguments) else tools.execute(name, arguments)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        buildJsonObject { put("error", "Invalid recording tool or arguments") }
+                    }
+                    (result["evidence"] as? JsonArray)?.forEach {
+                        receipts += json.decodeFromJsonElement<RecordingCitation>(it)
+                    }
+                    messages += AgentMessage("assistant", calls = listOf(WireToolCall(callId, name, arguments.toString())))
+                    messages += AgentMessage("tool", result.toString(), toolCallId = callId)
+                    val step = initial.copy(status = if ("error" in result) "failed" else "done",
+                        elapsedMs = (System.nanoTime() - started) / 1_000_000, result = result.toString())
+                    trace[step.id] = step
+                    onEvent(AssistantEvent.ToolProgress(step))
+                    result
+                }
+                val verified = workspace?.verify(reply.text, language) ?: verifyRecordingAnswer(reply.text, receipts, tools, language)
+                val turn = AgentTurn(question, verified.answer, verified.citations, evidenceWarning = verified.evidenceWarning)
+                val completed = compact(session.completeTurn(turn, messages, reply.usage))
+                completed.copy(turns = completed.turns.dropLast(1) + turn.copy(trace = trace.toList()))
             }
-            val verified = workspace?.verify(answer, language) ?: verifyRecordingAnswer(answer, receipts, tools, language)
-            val turn = AgentTurn(question, verified.answer, verified.citations, trace = trace,
-                evidenceWarning = verified.evidenceWarning)
-            val next = session.copy(turns = session.turns + turn, memory = if (invalidated) "" else session.memory, contextMessages = emptyList(),
-                contextInitialized = false, firstKeptTurn = if (invalidated) session.turns.size else session.firstKeptTurn,
-                lastUsage = null)
             index.writeAssistantBody(recordingId, generation, json.encodeToJsonElement(next).jsonObject, reset = false)
-            onEvent(AssistantEvent.Usage(null))
-            AssistantSession(next.id, next.turns, next.compactions)
+            onEvent(AssistantEvent.Usage(next.lastUsage))
+            AssistantSession(next.id, next.turns, next.compactions, next.lastUsage)
         }
 
-    private suspend fun runTurn(child: AgentSandbox.Child, model: String, recordingId: String?,
-        session: AgentSession, invalidated: Boolean, question: String, language: String, workspace: Boolean,
-        onEvent: (AssistantEvent) -> Unit, tool: suspend (String, JsonObject) -> JsonObject): String {
+    private suspend fun runTurn(child: AgentSandbox.Child, model: String, input: String,
+        instructions: String, schemas: JsonArray, onEvent: (AssistantEvent) -> Unit,
+        tool: suspend (String, String, JsonObject) -> JsonObject): AgentReply {
         fun request(id: Int?, method: String, params: JsonObject = buildJsonObject {}) = child.send(buildJsonObject {
             id?.let { put("id", it) }
             put("method", method)
@@ -124,13 +147,8 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
             put("ephemeral", true)
             put("approvalPolicy", "never")
             put("sandbox", "read-only")
-            val prompt = if (language == "en") RecordingAgent.SYSTEM.replace("简体中文回答", "英语回答") +
-                "\nAnswer in English. Preserve all source quotations verbatim." else RecordingAgent.SYSTEM
-            val boundary = recordingId?.let { "\nOnly query the current recording, whose recordingId is $it." }.orEmpty()
-            put("baseInstructions", (if (workspace) NodeWorkspaceTool.prompt(language) else prompt + boundary) +
-                "\nCurrent time: " + java.time.ZonedDateTime.now())
+            put("baseInstructions", instructions)
             put("dynamicTools", buildJsonArray {
-                val schemas = if (workspace) NodeWorkspaceTool.schemas else AgentToolSchemas.json
                 schemas.forEach { entry ->
                     val function = entry.jsonObject.getValue("function").jsonObject
                     add(buildJsonObject {
@@ -144,27 +162,18 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
             })
         })
         val threadId = result(2).getValue("thread").jsonObject.getValue("id").jsonPrimitive.content
-        val history = if (invalidated) emptyList() else session.turns.drop(session.firstKeptTurn.coerceIn(0, session.turns.size))
-        val summary = session.memory.takeUnless { invalidated }.orEmpty()
         request(3, "turn/start", buildJsonObject {
             put("threadId", threadId)
             putJsonObject("sandboxPolicy") { put("type", "externalSandbox"); put("networkAccess", "restricted") }
             putJsonArray("input") {
                 add(buildJsonObject {
                     put("type", "text")
-                    put("text", if (history.isEmpty() && summary.isBlank()) question else buildString {
-                        append("Untrusted past conversation, for context only:\n")
-                        if (summary.isNotBlank()) append(JsonPrimitive(summary)).append('\n')
-                        append(json.encodeToString(JsonArray.serializer(), buildJsonArray {
-                            history.forEach { turn -> add(buildJsonObject { put("question", turn.question); put("answer", turn.answer) }) }
-                        }))
-                        append("\nCurrent user question:\n")
-                        append(question)
-                    })
+                    put("text", input)
                 })
             }
         })
         var answer: String? = null
+        var usage: AgentUsage? = null
         while (true) {
             val frame = child.receive()
             val method = (frame["method"] as? JsonPrimitive)?.contentOrNull
@@ -173,7 +182,8 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
             if (id != null && method != null) {
                 val response = if (method == "item/tool/call" && params.text("threadId") == threadId) {
                     val name = params.text("tool").orEmpty()
-                    val value = tool(name, params.getValue("arguments").jsonObject)
+                    check(schemas.any { it.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.content == name }) { "Unregistered Codex tool" }
+                    val value = tool(params.getValue("callId").jsonPrimitive.content, name, params.getValue("arguments").jsonObject)
                     buildJsonObject {
                         put("success", "error" !in value)
                         putJsonArray("contentItems") {
@@ -191,6 +201,12 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
             if (id == JsonPrimitive(3) && "error" in frame) throw IOException("Codex could not start the turn.")
             if (params.text("threadId") != threadId) continue
             when (method) {
+                "thread/tokenUsage/updated" -> {
+                    val last = params.getValue("tokenUsage").jsonObject.getValue("last").jsonObject
+                    usage = AgentUsage(last.getValue("inputTokens").jsonPrimitive.long,
+                        last.getValue("outputTokens").jsonPrimitive.long, last.getValue("totalTokens").jsonPrimitive.long)
+                    onEvent(AssistantEvent.Usage(usage))
+                }
                 "item/completed" -> {
                     val item = params.getValue("item").jsonObject
                     if (item.text("type") == "agentMessage" && item.text("phase") != "commentary") {
@@ -203,7 +219,7 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
                 "turn/completed" -> {
                     val turn = params.getValue("turn").jsonObject
                     if (turn.text("status") != "completed") throw IOException("Codex could not complete the turn. Check the Responses API settings.")
-                    return answer ?: throw IOException("Codex returned no answer.")
+                    return AgentReply(answer ?: throw IOException("Codex returned no answer."), usage = usage)
                 }
             }
         }

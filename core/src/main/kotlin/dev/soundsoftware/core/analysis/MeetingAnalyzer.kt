@@ -42,7 +42,6 @@ data class LlmConfig(
 
 class AnalysisException(message: String, val retryable: Boolean = false) : Exception(message)
 
-data class GroundedAnswer(val text: String, val evidence: List<EvidenceRef>, val sourceTranscriptHash: String)
 
 /** Full transcript by default; explicit offline/test chunking remains available. No audio or external tools. */
 class MeetingAnalyzer(
@@ -65,7 +64,6 @@ class MeetingAnalyzer(
     private data class Fact(val text: String, val refs: List<EvidenceRef>)
     private data class Notes(val raw: JsonObject, val title: String?, val abstract: String, val abstractRefs: List<EvidenceRef>,
         val facts: Map<String, List<Fact>>, val todos: List<TodoItem>, val chapters: List<Chapter>)
-    private data class Answer(val raw: JsonObject, val found: Boolean, val text: String, val refs: List<EvidenceRef>)
 
     suspend fun repairTranscript(fragments: List<String>): String {
         require(fragments.isNotEmpty() && fragments.none { it.isBlank() })
@@ -131,52 +129,6 @@ class MeetingAnalyzer(
         }.getOrNull() ?: return SceneTemplate.MEETING
         checkpoints.write(key, selected.name)
         return selected
-    }
-
-    suspend fun answer(recording: Recording, question: String, history: List<QaTurn>): String = answerGrounded(recording, question, history).text
-
-    suspend fun answerGrounded(recording: Recording, question: String, history: List<QaTurn>): GroundedAnswer {
-        require(question.isNotBlank() && question.length <= 4000) { "问题需为1至4000字符" }
-        val source = parts(recording)
-        // Whole recent turns only. History clarifies references; it is not transcript evidence.
-        val sourceHash = transcriptHash(recording)
-        val recent = history.filter { it.sourceTranscriptHash == sourceHash }.takeLast(6).reversed().runningFold(emptyList<QaTurn>()) { acc, turn -> acc + turn }
-            .last { turns -> turns.sumOf { it.question.length + it.answer.length } <= 6000 }.reversed()
-        val context = buildJsonObject {
-            put("question", question)
-            put("history", buildJsonArray { recent.forEach { add(buildJsonObject { put("question", it.question); put("answer", it.answer) }) } })
-        }
-        val fingerprint = fingerprint(recording, "answer", context.toString())
-        var answers = chunk(source).mapIndexed { index, block ->
-            val data = buildJsonObject {
-                put("segments", buildJsonArray { block.forEach { add(it.data()) } }); put("context", context)
-                put("hardwareHighlights",highlightData(recording,block))
-                put("hardwareHighlightsStatus",recording.hardwareHighlightsStatus)
-            }
-            answerStage("$fingerprint/map/$index", false, data, block)
-        }.filter { it.found }
-        var level = 0
-        while (answers.size > 1) {
-            answers = groups(answers) { it.raw.toString().length }.mapIndexed { index, group ->
-                if (group.size == 1) group.single() else {
-                    val data = buildJsonObject {
-                        put("answers", buildJsonArray { group.forEach { add(it.raw) } }); put("context", context)
-                    }
-                    answerStage("$fingerprint/reduce/$level/$index/${digest(data.toString())}", true, data, source,
-                        group.flatMap { it.refs }.toSet())
-                }
-            }.filter { it.found }
-            level++
-        }
-        val result = answers.singleOrNull()
-        val refs = result?.refs.orEmpty().distinct()
-        val citationText = refs.map { ref ->
-            val segment = source.first { it.segment.id == ref.segmentId }.segment
-            val who = recording.speakerName(segment.speakerId)
-            listOfNotNull(segment.startMs?.let(::clock), who).joinToString(" · ").ifBlank { "片段 ${ref.segmentId}" }
-        }.distinct().joinToString("；")
-        val text = result?.text?.let { "$it\n\n依据：$citationText" } ?: "逐字稿没有提到相关信息。"
-        return GroundedAnswer(text, refs, transcriptHash(recording))
     }
 
     private fun parts(recording: Recording): List<Part> {
@@ -252,16 +204,6 @@ class MeetingAnalyzer(
         return notes
     }
 
-    private suspend fun answerStage(key: String, merge: Boolean, input: JsonObject, scope: List<Part>, allowed: Set<EvidenceRef>? = null): Answer {
-        val hash = digest(key)
-        checkpoints.read(hash)?.let { cached -> runCatching { parseAnswer(parseObject(cached), scope).also { validateMergeReferences(it.raw, allowed); validateResultBudget(it.raw) } }.getOrNull()?.let { return it } }
-        val result = parseAnswer(parseObject(chat(MeetingPrompts.answer(merge), input)), scope)
-        validateMergeReferences(result.raw, allowed)
-        validateResultBudget(result.raw)
-        checkpoints.write(hash, result.raw.toString())
-        return result
-    }
-
     private fun parseNotes(root: JsonObject, scope: List<Part>, recording: Recording, allowed: Set<EvidenceRef>?): Notes = checked {
         root.only("title", "abstract", "abstractEvidence", "keyPoints", "decisions", "risks", "openQuestions", "todos", "chapters")
         val byId = scope.groupBy { it.segment.id }
@@ -331,42 +273,6 @@ class MeetingAnalyzer(
             put("chapters", JsonArray(validatedChapterData))
         }
         Notes(validated, root.string("title", blank = true).takeIf { it.isNotBlank() }, abstract, abstractRefs, facts, todos, chapters)
-    }
-
-    private fun parseAnswer(input: JsonObject, scope: List<Part>): Answer = checked {
-        val root = materializeEvidence(input, scope).jsonObject
-        root.only("found", "answer", "evidence")
-        val flag = root["found"]?.jsonPrimitive ?: invalid("问答缺少found标识")
-        if (flag.isString) invalid("found应为布尔值")
-        val found = flag.booleanOrNull ?: invalid("问答缺少found标识")
-        val text = root.string("answer", blank = !found)
-        val refs = references(root.array("evidence"), scope, required = found)
-        if (!found && refs.isNotEmpty()) invalid("无依据回答不应包含证据")
-        Answer(root, found, if (found) text else "逐字稿没有提到相关信息。", refs)
-    }
-
-    /** Model selects a source; the app copies its text. Legacy quoted references still require
-     * exact matching, so a supplied fabricated quote is never replaced or silently accepted. */
-    private fun materializeEvidence(value: JsonElement, scope: List<Part>): JsonElement = when (value) {
-        is JsonObject -> if (value.keys == setOf("segmentId")) {
-            val id = value.string("segmentId")
-            val part = scope.firstOrNull { it.segment.id == id } ?: invalid("引用片段标识不存在")
-            buildJsonObject { put("segmentId", id); put("quote", part.text) }
-        } else JsonObject(value.mapValues { materializeEvidence(it.value, scope) })
-        is JsonArray -> JsonArray(value.map { materializeEvidence(it, scope) })
-        else -> value
-    }
-
-    private fun references(array: JsonArray, scope: List<Part>, required: Boolean = true): List<EvidenceRef> {
-        if (required && array.isEmpty()) invalid("事实缺少有效引用")
-        return array.map { element ->
-            val obj = element.jsonObject
-            obj.only("segmentId", "quote")
-            val id = obj.string("segmentId"); val quote = obj.string("quote")
-            val part = scope.firstOrNull { it.segment.id == id } ?: invalid("引用片段标识不存在")
-            if (quote.isBlank() || !part.text.contains(quote)) invalid("引用不是该片段的连续原文")
-            EvidenceRef(id, quote)
-        }.distinct()
     }
 
     private fun JsonObject.only(vararg keys: String) { if ((this.keys - keys.toSet()).isNotEmpty()) invalid("包含未约定字段") }

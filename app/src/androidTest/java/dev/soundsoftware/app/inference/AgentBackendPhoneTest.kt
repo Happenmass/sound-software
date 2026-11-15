@@ -43,7 +43,7 @@ class AgentBackendPhoneTest {
 
     private fun requirePhoneProbe() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("agentPhone") == "true")
-        check(app.packageName.endsWith(".agentpoc") || app.packageName.endsWith(".release") && app.instrumentationDataDir != null) {
+        check(app.packageName.endsWith(".agentpoc") || app.packageName.endsWith(".agentcleanup") || app.packageName.endsWith(".release") && app.instrumentationDataDir != null) {
             "Use a side-by-side build or an isolated release fixture."
         }
         assertTrue("The phone did not support the installed sandbox launcher", sandbox.supported)
@@ -93,6 +93,16 @@ class AgentBackendPhoneTest {
     @Test fun settingsSwitchPiCodexPiAndKeepTheHomeConversation() {
         requirePhoneProbe()
         compose.waitUntil(10_000) { app.assistant.state.value.ready }
+        val discarded = "discarded-before-compaction-${UUID.randomUUID()}"
+        runBlocking {
+            val previous = app.recordingIndex.latestSession()!!
+            app.recordingIndex.writeAssistantBody(null, app.recordingIndex.corpusGeneration,
+                Json.encodeToJsonElement(previous.copy(
+                    turns = previous.turns + dev.soundsoftware.core.agent.AgentTurn(discarded, "old answer", createdAt = 1),
+                    memory = "Retained summary marker", contextInitialized = true,
+                    contextMessages = emptyList(), compactions = 1, firstKeptTurn = previous.turns.size + 1)).jsonObject, false)
+            app.assistant.load()
+        }
         val session = app.assistant.state.value.session
         val stamp = UUID.randomUUID().toString().take(8)
         val keyword = "Larkspur$stamp"
@@ -142,18 +152,27 @@ class AgentBackendPhoneTest {
                     ask(first, 1)
                     val firstPi = assertRequest(pi, "/pi-fixture/v1/chat/completions", piKey, "fixture-pi-model")
                     assertTrue(firstPi.contains(first))
+                    assertFalse(firstPi.contains(discarded))
+                    assertTrue(firstPi.contains("Retained summary marker"))
                     assertRequest(pi, "/pi-fixture/v1/chat/completions", piKey, "fixture-pi-model")
 
                     configure("Codex", codexUrl, "gpt-5.4", codexKey)
                     ask(followUp, 2)
                     val firstCodex = assertRequest(codex, "/codex-fixture/v1/responses", codexKey, "gpt-5.4")
                     assertTrue(firstCodex.contains(first) && firstCodex.contains(followUp))
+                    assertFalse(firstCodex.contains(discarded))
+                    assertTrue(firstCodex.contains("Retained summary marker"))
                     assertRequest(codex, "/codex-fixture/v1/responses", codexKey, "gpt-5.4")
+                    val codexSaved = runBlocking { app.recordingIndex.latestSession()!! }
+                    assertNotNull("Codex must retain provider usage", codexSaved.lastUsage)
+                    assertTrue(codexSaved.contextMessages.any { it.role == "tool" && it.content.contains(keyword) })
 
                     configure("Pi")
                     ask(third, 3)
                     val resumedPi = assertRequest(pi, "/pi-fixture/v1/chat/completions", piKey, "fixture-pi-model")
                     assertTrue(listOf(first, followUp, third).all { resumedPi.contains(it) })
+                    assertFalse(resumedPi.contains(discarded))
+                    assertTrue(resumedPi.contains("Retained summary marker"))
                     assertRequest(pi, "/pi-fixture/v1/chat/completions", piKey, "fixture-pi-model")
 
                     val persisted = runBlocking { app.recordingIndex.latestSession() }
@@ -167,9 +186,17 @@ class AgentBackendPhoneTest {
                         submit(cancelQuestion)
                         val cancelling = assertRequest(codex, "/codex-fixture/v1/responses", codexKey, "gpt-5.4")
                         assertTrue(cancelling.contains(cancelQuestion))
+                        compose.waitUntil(5_000) { app.assistant.busy.value && app.workServiceActive }
+                        assertEquals(cancelQuestion, runBlocking { app.recordingIndex.interruptedQuestion(null) })
+                        // Navigating away must keep the foreground request alive.
+                        compose.onNodeWithContentDescription(activity.getString(R.string.back)).activate()
+                        assertTrue(app.assistant.busy.value)
+                        compose.onNode(hasClickAction() and hasContentDescription(activity.getString(R.string.recording_assistant))).activate()
                         assertTrue(app.cacheDir.listFiles().orEmpty().any { it.name.startsWith("agent-") })
                         compose.onNodeWithText(activity.getString(R.string.stop)).activate()
                         compose.waitUntil(10_000) { app.assistant.state.value.cancelled }
+                        compose.waitUntil(5_000) { !app.assistant.busy.value }
+                        assertNull(runBlocking { app.recordingIndex.interruptedQuestion(null) })
                         assertEquals(persisted?.turns, app.assistant.state.value.session.turns)
                         assertEquals("retained", durable.readText())
                         assertTrue(app.cacheDir.listFiles().orEmpty().none { it.name.startsWith("agent-") })
@@ -407,7 +434,7 @@ class AgentBackendPhoneTest {
         return body
     }
 
-    private class ModelFixture(private val responses: Boolean, private val keyword: String = "", private val script: String? = null) : Dispatcher() {
+    internal class ModelFixture(private val responses: Boolean, private val keyword: String = "", private val script: String? = null) : Dispatcher() {
         private val calls = java.util.concurrent.atomic.AtomicInteger()
         override fun dispatch(request: RecordedRequest): MockResponse {
             val requestBody = request.body.clone().readUtf8()
@@ -419,7 +446,8 @@ class AgentBackendPhoneTest {
             val output = if (responses) messages.map { it.jsonObject }.lastOrNull { it.text("type") == "function_call_output" }
             else messages.lastOrNull()?.jsonObject?.takeIf { it.text("role") == "tool" }
             val result = output?.text(if (responses) "output" else "content")
-            val answer = result?.let {
+            val compacting = requestBody.contains("总结较早的录音助手上下文")
+            val answer = if (compacting) """{"summary":"retained-summary after compaction"}""" else result?.let {
                 val resultBody = Json.parseToJsonElement(it).jsonObject
                 val evidence = resultBody["evidence"]?.jsonArray.orEmpty()
                 buildJsonObject {

@@ -101,7 +101,7 @@ class ProductPipelineTest {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(401))
             val analyzer = MeetingAnalyzer(LlmConfig(server.url("/"), "m", allowInsecureForTests = true), { null })
-            val error = runCatching { analyzer.answer(recording, "谁负责？", emptyList()) }.exceptionOrNull()
+            val error = runCatching { analyzer.summarize(recording, SceneTemplate.MEETING, emptyList()) }.exceptionOrNull()
             assertTrue(error is AnalysisException && error.message!!.contains("401"))
         }
     }

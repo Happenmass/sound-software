@@ -99,7 +99,7 @@ class LongRecordingClusteringProbeTest {
             val before=base.transcript!!;val after=current.transcript!!
             assertEquals(before.copy(segments=before.segments.map {it.copy(speakerId=null)},warnings=emptyList()),
                 after.copy(segments=after.segments.map {it.copy(speakerId=null)},warnings=emptyList()))
-            assertEquals(base.summary,current.summary);assertEquals(base.qa,current.qa)
+            assertEquals(base.summary,current.summary);assertEquals(base.legacyQa,current.legacyQa)
             assertEquals(base.title,current.title);assertEquals(base.titleEditedByUser,current.titleEditedByUser)
             assertEquals(manifest[i].getValue("audioSha256").jsonPrimitive.content,sha(app.repository.audioFile(base.id)))
             assertEquals(SpeakerClustering.VERSION,current.speakerAnalysis?.revision)
