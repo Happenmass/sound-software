@@ -23,6 +23,7 @@ class AgentSandbox(private val context: Context, private val dataDir: File = con
     private val launcher = File(native, "libsound_agent_sandbox.so")
     internal val node = File(native, "libsound_agent_node.so").absolutePath
     internal val codex = File(native, "libsound_agent_codex.so").absolutePath
+    internal val recordingMcpEnabled = BuildConfig.DEBUG && context.packageName.endsWith(".mcppoc")
 
     internal val supported: Boolean by lazy {
         (BuildConfig.PI_ENABLED || BuildConfig.CODEX_ENABLED) && runCatching {
@@ -40,6 +41,7 @@ class AgentSandbox(private val context: Context, private val dataDir: File = con
 
     internal fun start(executable: String, args: List<String>, recordingId: String?, relayPort: Int? = null,
         script: Boolean = false,
+        mcpPort: Int? = null,
         prepare: (File) -> Unit = {}): Child {
         check(supported) { "Landlock ABI 6 is required on this phone." }
         val workspace = workspaceFor(recordingId)
@@ -61,6 +63,7 @@ class AgentSandbox(private val context: Context, private val dataDir: File = con
                 put("SHELL", "/system/bin/sh")
                 if (script) put("SOUND_AGENT_SCRIPT", "1")
                 if (relayPort != null) put("SOUND_MODEL_RELAY_PORT", relayPort.toString())
+                if (mcpPort != null) put("SOUND_RECORDING_MCP_PORT", mcpPort.toString())
             }
             return Child(work, builder.start())
         } catch (error: Exception) {
@@ -69,10 +72,19 @@ class AgentSandbox(private val context: Context, private val dataDir: File = con
         }
     }
 
-    internal fun startPi(recordingId: String?): Child = start(node, listOf("pi-host.cjs"), recordingId) { work ->
+    internal fun startPi(recordingId: String?, mcp: RecordingMcpBridge? = null): Child =
+        start(node, listOf("pi-host.cjs"), recordingId, mcpPort = mcp?.port) { work ->
         context.assets.open("pi-host.cjs").use { input ->
             File(work, "pi-host.cjs").outputStream().use(input::copyTo)
         }
+        mcp?.let { stageRecordingMcp(work, it) }
+    }
+
+    internal fun stageRecordingMcp(work: File, mcp: RecordingMcpBridge) {
+        context.assets.open("recording-mcp.cjs").use { input ->
+            File(work, "recording-mcp.cjs").outputStream().use(input::copyTo)
+        }
+        File(work, "recording-mcp.json").writeText(mcp.connection.toString())
     }
 
     internal class Child(val work: File, private val process: Process) : Closeable {

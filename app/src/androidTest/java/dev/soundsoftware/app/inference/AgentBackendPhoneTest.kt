@@ -49,6 +49,57 @@ class AgentBackendPhoneTest {
         assertTrue("The phone did not support the installed sandbox launcher", sandbox.supported)
     }
 
+    @Test fun stdioMcpDiscoversFiveToolsAndRejectsAnotherRecording() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("agentPhone") == "true")
+        check(app.packageName.endsWith(".mcppoc") && app.instrumentationDataDir != null)
+        assertTrue(sandbox.supported)
+        compose.waitUntil(10_000) { app.assistant.state.value.ready }
+        val stamp = UUID.randomUUID().toString().take(8)
+        val keyword = "Beacon$stamp"
+        val fixtures = listOf("A", "B").map { label ->
+            Recording(id = UUID.randomUUID().toString(), createdAt = System.currentTimeMillis(),
+                durationMs = 5_000, title = "MCP $label $stamp", stage = ProcessingStage.DONE,
+                transcript = Transcript(listOf(Segment("mcp-$label", "$keyword synthetic recording $label.", 1_000, 2_000)),
+                    "fixture", "test", "SEGMENT", 0))
+        }
+        val (a, b) = fixtures
+        runBlocking(Dispatchers.IO) {
+            fixtures.forEach {
+                PcmWav.writeMono(app.repository.audioFile(it.id), FloatArray(80_000), 16_000)
+                app.repository.add(it)
+            }
+        }
+        listOf("Pi", "Codex").forEachIndexed { index, backend ->
+            val scoped = ScopedMcpFixture(a, b, keyword)
+            MockWebServer().use { server ->
+                server.dispatcher = ModelFixture(responses = backend == "Codex", scoped = scoped)
+                server.start()
+                configure(backend, "http://localhost:${server.port}/v1",
+                    if (backend == "Pi") "fixture-pi-model" else "gpt-5.4", "fixture-key")
+                compose.onNodeWithText(checkNotNull(a.title)).activate()
+                compose.onNodeWithText(activity.getString(R.string.ai_qa)).activate()
+                compose.onNodeWithText(activity.getString(R.string.assistant_this_recording)).assertExists()
+                val state = app.assistant.stateFor(a.id)
+                compose.waitUntil(10_000) { state.value.ready }
+                val placeholder = activity.getString(R.string.ask_recordings_placeholder)
+                compose.onNode(hasSetTextAction() and hasText(placeholder, substring = true))
+                    .performTextInput("Check $keyword using recording tools for the current recording.")
+                compose.onNodeWithContentDescription(activity.getString(R.string.send)).activate()
+                compose.waitUntil(35_000) { scoped.failure != null || state.value.error != null || state.value.session.turns.size > index }
+                scoped.failure?.let { throw AssertionError("$backend model fixture rejected the exchange", it) }
+                assertNull(state.value.error)
+                val turn = state.value.session.turns.last()
+                assertEquals(listOf(a.id), turn.citations.map { it.recordingId })
+                assertTrue(scoped.denied)
+                val report = android.os.Bundle().apply {
+                    putString("stream", "\n$backend MCP: ${scoped.discovered.sorted().joinToString()}, A evidence verified, B rejected by Android\n")
+                }
+                InstrumentationRegistry.getInstrumentation().sendStatus(0, report)
+                if (index == 0) compose.onNodeWithContentDescription(activity.getString(R.string.back)).activate()
+            }
+        }
+    }
+
     @Test fun workspacesSurviveTurnsAndRemainScoped() = runBlocking(Dispatchers.IO) {
         requirePhoneProbe()
         val launcher = sandbox
@@ -434,7 +485,90 @@ class AgentBackendPhoneTest {
         return body
     }
 
-    internal class ModelFixture(private val responses: Boolean, private val keyword: String = "", private val script: String? = null) : Dispatcher() {
+    internal class ScopedMcpFixture(private val a: Recording, private val b: Recording, val keyword: String) {
+        data class Reply(val name: String = "", val namespace: String? = null,
+            val arguments: JsonObject = buildJsonObject {}, val answer: String? = null)
+
+        @Volatile var failure: Throwable? = null
+        @Volatile var discovered = emptySet<String>()
+        @Volatile var denied = false
+        private var evidence: JsonObject? = null
+        private val expected = setOf("list_recordings", "search_recordings", "read_segments", "list_todos", "list_highlights")
+
+        fun plan(id: Int, body: JsonObject, output: JsonElement?): Reply {
+            val definitions = definitions(body).toMap()
+            assertEquals("Tool definitions at call $id", expected, definitions.keys)
+            discovered = definitions.keys
+            if (id == 1) return definitions.getValue("search_recordings").copy(arguments = buildJsonObject { put("query", keyword) })
+            val result = objects(output).firstOrNull { "evidence" in it || "code" in it || "error" in it }
+            checkNotNull(result) { "Missing tool result at call $id: $output" }
+            if (id == 2) {
+                evidence = result.getValue("evidence").jsonArray.single().jsonObject
+                assertEquals(a.id, evidence!!.getValue("recordingId").jsonPrimitive.content)
+                assertTrue(evidence!!.getValue("quote").jsonPrimitive.content.contains("recording A"))
+                return definitions.getValue("read_segments").copy(arguments = buildJsonObject { put("recordingId", b.id) })
+            }
+            assertEquals(3, id)
+            assertEquals("recording_scope_denied", result.getValue("code").jsonPrimitive.content)
+            assertFalse("A denied call returned evidence", "evidence" in result)
+            denied = true
+            val citation = checkNotNull(evidence).filterKeys { it in setOf("recordingId", "segmentId", "revision", "quote") }
+            val answer = buildJsonObject {
+                put("found", true); put("answer", "Verified recording A. Android rejected recording B.")
+                put("citations", JsonArray(listOf(JsonObject(citation))))
+            }
+            return Reply(answer = answer.toString())
+        }
+
+        private fun definitions(value: JsonElement, namespace: String? = null): Sequence<Pair<String, Reply>> = when (value) {
+            is JsonObject -> sequence {
+                val name = (value["name"] as? JsonPrimitive)?.contentOrNull
+                val suppliedNamespace = (value["namespace"] as? JsonPrimitive)?.contentOrNull
+                val toolNamespace = if ((value["type"] as? JsonPrimitive)?.content == "namespace") name else
+                    suppliedNamespace ?: namespace
+                if (name != null && ("parameters" in value || "inputSchema" in value || "description" in value)) {
+                    expected.find { name == it || name.endsWith("__$it") }?.let { yield(it to Reply(name, toolNamespace)) }
+                }
+                for (child in value.values) yieldAll(definitions(child, toolNamespace))
+            }
+            is JsonArray -> value.asSequence().flatMap { definitions(it, namespace) }
+            else -> emptySequence()
+        }
+
+        private fun objects(value: JsonElement?): Sequence<JsonObject> = when (value) {
+            is JsonObject -> sequenceOf(value) + value.values.asSequence().flatMap(::objects)
+            is JsonArray -> value.asSequence().flatMap(::objects)
+            is JsonPrimitive -> {
+                val text = value.content.substringAfter("\nOutput:\n").trimStart()
+                if (value.isString && text.startsWith('{')) {
+                    objects(runCatching { Json.parseToJsonElement(text) }.getOrNull())
+                } else emptySequence()
+            }
+            else -> emptySequence()
+        }
+    }
+
+    internal class ModelFixture(private val responses: Boolean, private val keyword: String = "", private val script: String? = null,
+        private val scoped: ScopedMcpFixture? = null) : Dispatcher() {
+        private fun objects(value: JsonElement?): Sequence<JsonObject> = when (value) {
+            is JsonObject -> sequenceOf(value) + value.values.asSequence().flatMap(::objects)
+            is JsonArray -> value.asSequence().flatMap(::objects)
+            is JsonPrimitive -> {
+                val text = value.content.substringAfter("\nOutput:\n").trimStart()
+                if (value.isString && (text.startsWith('{') || text.startsWith('[')))
+                    objects(runCatching { Json.parseToJsonElement(text) }.getOrNull()) else emptySequence()
+            }
+            else -> emptySequence()
+        }
+        private fun toolDefinition(value: JsonElement, expected: String, namespace: String? = null): Pair<String, String?>? {
+            if (value is JsonObject) {
+                val name = (value["name"] as? JsonPrimitive)?.content
+                val ns = if ((value["type"] as? JsonPrimitive)?.content == "namespace") name else namespace
+                if (name == expected || name?.endsWith("__$expected") == true) return name to namespace
+                value.values.forEach { child -> toolDefinition(child, expected, ns)?.let { return it } }
+            } else if (value is JsonArray) value.forEach { child -> toolDefinition(child, expected, namespace)?.let { return it } }
+            return null
+        }
         private val calls = java.util.concurrent.atomic.AtomicInteger()
         override fun dispatch(request: RecordedRequest): MockResponse {
             val requestBody = request.body.clone().readUtf8()
@@ -445,9 +579,13 @@ class AgentBackendPhoneTest {
             val messages = body[if (responses) "input" else "messages"]?.jsonArray.orEmpty()
             val output = if (responses) messages.map { it.jsonObject }.lastOrNull { it.text("type") == "function_call_output" }
             else messages.lastOrNull()?.jsonObject?.takeIf { it.text("role") == "tool" }
-            val result = output?.text(if (responses) "output" else "content")
+            val rawOutput = output?.get(if (responses) "output" else "content")
+            val plan = try { scoped?.plan(id, body, rawOutput) } catch (error: Throwable) {
+                scoped?.failure = error
+                return MockResponse().setResponseCode(400)
+            }
             val compacting = requestBody.contains("总结较早的录音助手上下文")
-            val answer = if (compacting) """{"summary":"retained-summary after compaction"}""" else result?.let {
+            val answer = if (compacting) """{"summary":"retained-summary after compaction"}""" else plan?.answer ?: if (plan != null) null else objects(rawOutput).firstOrNull { "evidence" in it || "stdout" in it || "error" in it }?.toString()?.let {
                 val resultBody = Json.parseToJsonElement(it).jsonObject
                 val evidence = resultBody["evidence"]?.jsonArray.orEmpty()
                 buildJsonObject {
@@ -462,10 +600,11 @@ class AgentBackendPhoneTest {
                     }))
                 }.toString()
             }
-            val toolName = if (script == null) "search_recordings" else "run_node"
-            val args = buildJsonObject {
+            val declared = toolDefinition(body["tools"] ?: JsonArray(emptyList()), if (script == null) "search_recordings" else "run_node")
+            val toolName = plan?.name ?: declared?.first ?: if (script == null) "search_recordings" else "run_node"
+            val args = (plan?.arguments ?: buildJsonObject {
                 if (script == null) put("query", keyword) else put("script", script)
-            }.toString()
+            }).toString()
             val callId = "fixture-call-$id"
             return if (!responses) MockResponse().setHeader("Content-Type", "application/json").setBody(buildJsonObject {
                 putJsonArray("choices") {
@@ -489,6 +628,7 @@ class AgentBackendPhoneTest {
                     if (answer == null) {
                         put("type", "function_call"); put("call_id", callId)
                         put("name", toolName); put("arguments", args)
+                        (plan?.namespace ?: declared?.second)?.let { put("namespace", it) }
                     } else {
                         put("type", "message"); put("role", "assistant")
                         putJsonArray("content") {

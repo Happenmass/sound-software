@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createAgentManagement } from "./management.mjs";
 import { createRecordingSessions } from "./recording-sessions.mjs";
@@ -17,13 +18,29 @@ async function serve() {
     lines.once("close", () => abort.abort());
     let management;
     let client;
+    let recordings;
     try {
         const first = await input.next();
         if (first.done) return;
         const request = JSON.parse(first.value);
+        if (request.recordingMcpCommand) {
+            recordings = new Client({ name: "soundsoftware-pi", version: "1.0.0" });
+            await recordings.connect(new StdioClientTransport({
+                command: request.recordingMcpCommand, args: ["recording-mcp.cjs"], stderr: "inherit",
+            }));
+            const { tools } = await recordings.listTools();
+            request.schemas = tools.map(({ name, description, inputSchema }) => ({
+                type: "function", function: { name, description, parameters: inputSchema },
+            }));
+        }
         const run = (command, signal) => sessionCommand(command, async (kind, payload) => {
             abort.signal.throwIfAborted();
             signal.throwIfAborted();
+            if (recordings && kind === "tool") {
+                const result = await recordings.callTool({ name: payload.name, arguments: payload.args }, undefined, { signal });
+                return result.structuredContent ?? JSON.parse(result.content[0].text);
+            }
+            if (recordings && kind === "model" && payload.tools) payload = { ...payload, schemas: request.schemas };
             send({ kind, ...payload });
             const next = await input.next();
             if (next.done) throw new Error("Android bridge closed");
@@ -64,6 +81,7 @@ async function serve() {
         management?.cancelAll();
         await client?.close();
         await management?.server.close();
+        await recordings?.close();
         lines.close();
         process.stdin.pause();
     }

@@ -26,7 +26,7 @@ class AgentRuntimeHandoffTest {
     @Test fun compressedHistoryToolsUsageAndQueuedCancellationSurviveBackendHandoff() = runBlocking {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as SoundApplication
         assumeTrue(InstrumentationRegistry.getArguments().getString("agentPhone") == "true")
-        check(app.packageName.endsWith(".agentcleanup") && app.instrumentationDataDir != null)
+        check((app.packageName.endsWith(".agentcleanup") || app.packageName.endsWith(".agentcleanup.mcppoc")) && app.instrumentationDataDir != null)
         assertTrue(AgentSandbox(app).supported)
         withTimeout(10000) { app.assistant.state.first { it.ready } }
         ActivityScenario.launch(MainActivity::class.java).use { activity ->
@@ -100,6 +100,45 @@ class AgentRuntimeHandoffTest {
                 assertTrue(app.recordingIndex.latestSession(id)!!.turns.isEmpty())
                 withTimeout(5000) { while (app.workServiceActive) delay(20) }
             } }
+        }
+    }
+
+    @Test fun nativeMcpDiscoversFiveToolsAndRejectsCrossRecordingQueries() = runBlocking {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as SoundApplication
+        assumeTrue(InstrumentationRegistry.getArguments().getString("agentPhone") == "true")
+        check(app.packageName.endsWith(".agentcleanup") || app.packageName.endsWith(".agentcleanup.mcppoc"))
+        assumeTrue(AgentSandbox(app).recordingMcpEnabled)
+        ActivityScenario.launch(MainActivity::class.java).use {
+            val keyword = "ScopeFixture"
+            fun record(id: String, label: String) = Recording(id, 0, 1000, stage = ProcessingStage.DONE,
+                transcript = Transcript(listOf(Segment("s", "$keyword recording $label authorized text", 0, 1000)), "fixture", "fixture", "SEGMENT", 0))
+            val a = record(UUID.randomUUID().toString(), "A"); val b = record(UUID.randomUUID().toString(), "B")
+            withContext(Dispatchers.IO) {
+                for (recording in listOf(a, b)) {
+                    PcmWav.writeMono(app.repository.audioFile(recording.id), FloatArray(16000), 16000)
+                    app.repository.add(recording)
+                }
+            }
+            val local = withContext(Dispatchers.Main) { app.assistant.stateFor(a.id) }
+            val opened = withTimeout(10000) { local.first { it.ready || it.error != null } }
+            assertTrue(opened.error, opened.ready)
+            for (backend in AssistantBackend.entries) {
+                val fixture = AgentBackendPhoneTest.ScopedMcpFixture(a, b, keyword)
+                MockWebServer().use { server ->
+                    server.dispatcher = AgentBackendPhoneTest.ModelFixture(backend == AssistantBackend.CODEX, scoped = fixture)
+                    server.start()
+                    val config = AssistantModelSettings(server.url("/v1").newBuilder().host("localhost").build().toString(), "gpt-5.4")
+                    app.settings.update { it.copy(assistantBackend = backend, pi = config, codex = config) }
+                    withContext(Dispatchers.Main) { app.assistant.ask("Check the scoped recordings", a.id) }
+                    val result = withTimeout(30000) { local.first { !it.busy } }
+                    fixture.failure?.let { throw AssertionError("Synthetic MCP responder failed", it) }
+                    assertNull(result.error, result.error)
+                    assertTrue(fixture.denied); assertEquals(5, fixture.discovered.size)
+                    assertEquals(a.id, result.session.turns.last().citations.single().recordingId)
+                    assertTrue(app.recordingIndex.latestSession(a.id)!!.contextMessages.any { message ->
+                        message.role == "tool" && message.content.contains("recording_scope_denied") })
+                }
+            }
         }
     }
 }

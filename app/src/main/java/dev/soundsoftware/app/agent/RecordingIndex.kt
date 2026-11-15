@@ -19,6 +19,8 @@ interface RecordingProjection {
     fun remove(id: String)
 }
 
+internal class RecordingScopeDenied : SecurityException("Recording is outside the authorized scope.")
+
 /** App-private SQLite relational mirror. WAV/legacy metadata remain compatible and rebuildable. */
 class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeable {
     private val db: SQLiteDatabase
@@ -239,7 +241,7 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
 
     fun toolsFor(recordingId: String?): RecordingTools = if (recordingId == null) this else object : RecordingTools {
         override suspend fun execute(name: String, arguments: JsonObject): JsonObject {
-            require(arguments["recordingId"]?.let { it == JsonPrimitive(recordingId) } != false)
+            if (arguments["recordingId"]?.let { it != JsonPrimitive(recordingId) } == true) throw RecordingScopeDenied()
             return this@RecordingIndex.execute(name, JsonObject(arguments + ("recordingId" to JsonPrimitive(recordingId))))
         }
 
