@@ -17,6 +17,7 @@ local.properties
 *.ogg
 __pycache__/
 .venv/
+node_modules/
 tools/model-validation/results/
 
 # Private research input, validation captures, and signing material

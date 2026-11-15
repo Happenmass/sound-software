@@ -2,46 +2,40 @@ package dev.soundsoftware.core.transcript
 
 import dev.soundsoftware.core.model.Segment
 import dev.soundsoftware.core.model.Speaker
-import dev.soundsoftware.core.vad.SpeechRange
 
 /** One diarization turn on the original recording time axis. */
 data class SpeakerTurn(val startMs: Long, val endMs: Long, val speaker: Int) {
     init { require(startMs >= 0 && endMs > startMs) }
 }
 
-/**
- * Normalizes raw diarizer output into recognition windows: sorted, overlap-free, same-speaker
- * turns joined across short pauses, and long turns split so each window fits the recognizer.
- */
-fun mergeTurns(turns: List<SpeakerTurn>, maxGapMs: Long = 600, maxLenMs: Long = 20_000, minLenMs: Long = 300): List<SpeakerTurn> {
-    val merged = mutableListOf<SpeakerTurn>()
-    for (turn in turns.sortedBy { it.startMs }) {
-        val start = maxOf(turn.startMs, merged.lastOrNull()?.endMs ?: 0)
-        if (turn.endMs <= start) continue
-        val last = merged.lastOrNull()
-        if (last != null && last.speaker == turn.speaker && start - last.endMs <= maxGapMs && turn.endMs - last.startMs <= maxLenMs) {
-            merged[merged.lastIndex] = last.copy(endMs = turn.endMs)
-        } else merged += SpeakerTurn(start, turn.endMs, turn.speaker)
-    }
-    val split = merged.flatMap { turn ->
-        generateSequence(turn.startMs) { it + maxLenMs }.takeWhile { it < turn.endMs }
-            .map { SpeakerTurn(it, minOf(turn.endMs, it + maxLenMs), turn.speaker) }.toList()
-    }
-    // Very short blips are attached to the previous window instead of being recognized alone.
-    val result = mutableListOf<SpeakerTurn>()
-    for (turn in split) {
-        val last = result.lastOrNull()
-        if (last != null && turn.endMs - turn.startMs < minLenMs && turn.startMs - last.endMs <= maxGapMs && turn.endMs - last.startMs <= maxLenMs) {
-            result[result.lastIndex] = last.copy(endMs = turn.endMs)
-        } else result += turn
-    }
-    return result
-}
+private const val MIN_SILENCE_MS = 1500L
 
-fun List<SpeakerTurn>.toSpeechRanges(sampleRate: Int, totalSamples: Long): List<SpeechRange> = mapNotNull {
-    val start = it.startMs * sampleRate / 1000
-    val end = minOf(totalSamples, it.endMs * sampleRate / 1000)
-    if (end > start) SpeechRange(start, end) else null
+/** Groups consecutive turns of a known speaker while keeping the original cuts for ASR. */
+internal fun groupSpeakerTurns(turns: List<SpeakerTurn>, durationMs: Long): List<List<SpeakerTurn>> {
+    val maxDurationMs = 5 * 60 * 1000L
+    val groups = mutableListOf<MutableList<SpeakerTurn>>()
+    var coveredUntil = 0L
+    var previousSpeaker: Int? = null
+    for (turn in turns.sortedBy { it.startMs }) {
+        var start = maxOf(coveredUntil, turn.startMs)
+        val end = minOf(durationMs, turn.endMs)
+        while (start < end) {
+            val partEnd = minOf(end, start + maxDurationMs)
+            val part = SpeakerTurn(start, partEnd, turn.speaker)
+            val group = groups.lastOrNull()
+            val first = group?.first()
+            if (first != null && part.speaker >= 0 && previousSpeaker == part.speaker && first.speaker == part.speaker &&
+                start - group.last().endMs < MIN_SILENCE_MS && partEnd - first.startMs <= maxDurationMs) {
+                group.add(part)
+            } else {
+                groups.add(mutableListOf(part))
+            }
+            start = partEnd
+            coveredUntil = partEnd
+        }
+        previousSpeaker = turn.speaker
+    }
+    return groups
 }
 
 /**
@@ -73,7 +67,7 @@ fun speakerStats(segments: List<Segment>): Map<String, SpeakerStats> {
 }
 
 /** Gaps of at least [minGapMs] between timed segments, used by "skip silence" playback. */
-fun silentGaps(segments: List<Segment>, durationMs: Long, minGapMs: Long = 1500): List<LongRange> {
+fun silentGaps(segments: List<Segment>, durationMs: Long, minGapMs: Long = MIN_SILENCE_MS): List<LongRange> {
     val timed = segments.filter { it.startMs != null && it.endMs != null }.sortedBy { it.startMs }
     if (timed.isEmpty()) return emptyList()
     val gaps = mutableListOf<LongRange>()

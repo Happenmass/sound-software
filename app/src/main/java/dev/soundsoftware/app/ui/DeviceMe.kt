@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +21,8 @@ import dev.soundsoftware.app.BuildConfig
 import dev.soundsoftware.app.R
 import dev.soundsoftware.app.Screen
 import dev.soundsoftware.app.data.LlmSettings
+import dev.soundsoftware.app.data.AssistantBackend
+import dev.soundsoftware.app.data.AssistantModelSettings
 import dev.soundsoftware.app.data.RemoteAsrSettings
 import dev.soundsoftware.app.device.LinkPhase
 import dev.soundsoftware.app.processing.ASR_PROFILES
@@ -152,7 +155,8 @@ fun MeContent(vm: AppViewModel, onImport: () -> Unit) {
         }
         SectionLabel(stringResource(R.string.notes_and_ai_qa))
         Group {
-            SettingRow(stringResource(R.string.notes_service), if (vm.llmReady()) settings.llm.model else stringResource(R.string.not_configured), subtitle = stringResource(R.string.notes_service_privacy), chevron = true, divider = false) { vm.push(Screen.LlmService) }
+            SettingRow(stringResource(R.string.notes_service), if (vm.llmReady()) settings.llm.model else stringResource(R.string.not_configured), subtitle = stringResource(R.string.notes_service_privacy), chevron = true) { vm.push(Screen.LlmService) }
+            SettingRow(stringResource(R.string.assistant_backend), assistantBackendName(settings.assistantBackend), chevron = true, divider = false) { vm.push(Screen.AssistantSettings) }
         }
         val localModels = vm.localAsrProfiles()
         SectionLabel(stringResource(R.string.local_models))
@@ -197,10 +201,79 @@ fun LlmServiceScreen(vm: AppViewModel) {
     var base by remember { mutableStateOf(settings.llm.baseUrl) }
     var model by remember { mutableStateOf(settings.llm.model) }
     var key by remember { mutableStateOf("") }
+    var repair by rememberSaveable { mutableStateOf(settings.llm.repairTranscript) }
     ServiceForm(stringResource(R.string.notes_service), stringResource(R.string.notes_service_help),
         listOf(Triple("Base URL", base) { v: String -> base = v }, Triple(stringResource(R.string.model), model) { v: String -> model = v }),
-        key, { key = it }, vm.hasSecret(Processor.KEY_LLM), onBack = { vm.back() }) {
-        if (vm.saveLlm(LlmSettings(base, model), key.ifBlank { null })) { vm.say(vm.app.getString(R.string.saved)); vm.back() }
+        key, { key = it }, vm.hasSecret(Processor.KEY_LLM), extra = {
+            SettingRow(stringResource(R.string.repair_transcript), subtitle = stringResource(R.string.repair_transcript_help),
+                trailing = { WebCheckbox(repair, { repair = it }, label = stringResource(R.string.repair_transcript)) }, divider = false) { repair = !repair }
+        }, onBack = { vm.back() }) {
+        if (vm.saveLlm(LlmSettings(base, model, repair), key.ifBlank { null })) { vm.say(vm.app.getString(R.string.saved)); vm.back() }
+    }
+}
+
+@Composable
+private fun assistantBackendName(backend: AssistantBackend?): String = when (backend) {
+    AssistantBackend.PI -> "Pi"
+    AssistantBackend.CODEX -> "Codex"
+    AssistantBackend.BUILT_IN -> stringResource(R.string.assistant_built_in)
+    null -> stringResource(R.string.assistant_default)
+}
+
+@Composable
+fun AssistantSettingsScreen(vm: AppViewModel) {
+    val settings by vm.settings.collectAsState()
+    var backend by rememberSaveable { mutableStateOf(settings.assistantBackend) }
+    var piUrl by rememberSaveable { mutableStateOf(settings.pi.baseUrl) }
+    var piModel by rememberSaveable { mutableStateOf(settings.pi.model) }
+    var piKey by remember { mutableStateOf("") }
+    var codexUrl by rememberSaveable { mutableStateOf(settings.codex.baseUrl) }
+    var codexModel by rememberSaveable { mutableStateOf(settings.codex.model) }
+    var codexKey by remember { mutableStateOf("") }
+    val choices = buildList<AssistantBackend?> {
+        add(null)
+        if (BuildConfig.PI_ENABLED || backend == AssistantBackend.PI) add(AssistantBackend.PI)
+        if (BuildConfig.CODEX_ENABLED || backend == AssistantBackend.CODEX) add(AssistantBackend.CODEX)
+        add(AssistantBackend.BUILT_IN)
+    }
+    val selectingPi = backend == AssistantBackend.PI
+    val selectingCodex = backend == AssistantBackend.CODEX
+    Column(Modifier.fillMaxSize().background(C.PageBg).statusBarsPadding().navigationBarsPadding().imePadding()) {
+        TopBar(stringResource(R.string.assistant_backend), onBack = { vm.back() })
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Group {
+                choices.forEachIndexed { i, choice ->
+                    val label = assistantBackendName(choice)
+                    SettingRow(label, divider = i < choices.lastIndex, trailing = {
+                        WebCheckbox(backend == choice, { backend = choice }, label = label)
+                    }) { backend = choice }
+                }
+            }
+            if (selectingPi || selectingCodex) {
+                T(stringResource(if (selectingPi) R.string.assistant_pi_model_help else R.string.assistant_codex_model_help),
+                    ts(13, 400, C.Muted))
+                T("Base URL", ts(13, 400, C.Muted))
+                Field(if (selectingPi) piUrl else codexUrl, { if (selectingPi) piUrl = it else codexUrl = it }, "https://…/v1", keyboard = KeyboardType.Uri)
+                T(stringResource(R.string.model), ts(13, 400, C.Muted))
+                Field(if (selectingPi) piModel else codexModel, { if (selectingPi) piModel = it else codexModel = it }, "")
+                val hasKey = vm.hasSecret(if (selectingPi) AssistantModelSettings.PI_KEY else AssistantModelSettings.CODEX_KEY)
+                T("API Key" + if (hasKey) stringResource(R.string.key_saved_hint) else "", ts(13, 400, C.Muted))
+                Field(if (selectingPi) piKey else codexKey, { if (selectingPi) piKey = it else codexKey = it },
+                    if (hasKey) "••••••••" else "sk-…", secret = true)
+            } else {
+                SettingRow(stringResource(R.string.notes_service), chevron = true, divider = false) { vm.push(Screen.LlmService) }
+            }
+        }
+        Box(Modifier.padding(16.dp)) {
+            PillButton(stringResource(R.string.save)) {
+                if (vm.saveAssistant(backend, AssistantModelSettings(piUrl, piModel),
+                        AssistantModelSettings(codexUrl, codexModel), piKey, codexKey)) {
+                    vm.say(vm.app.getString(R.string.saved))
+                    vm.back()
+                }
+            }
+        }
     }
 }
 

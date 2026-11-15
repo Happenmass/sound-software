@@ -22,7 +22,18 @@ import kotlinx.serialization.json.Json
 
 @Serializable data class RemoteAsrSettings(val endpoint: String = "", val model: String = "", val segmentTimestamps: Boolean = false)
 
-@Serializable data class LlmSettings(val baseUrl: String = "", val model: String = "")
+@Serializable data class LlmSettings(val baseUrl: String = "", val model: String = "", val repairTranscript: Boolean = false)
+
+@Serializable
+enum class AssistantBackend { PI, CODEX, BUILT_IN }
+
+@Serializable
+data class AssistantModelSettings(val baseUrl: String = "", val model: String = "") {
+    companion object {
+        const val PI_KEY = "pi-model"
+        const val CODEX_KEY = "codex-model"
+    }
+}
 
 @Serializable
 data class AppSettings(
@@ -35,6 +46,9 @@ data class AppSettings(
     val findMyEnabled: Boolean? = null,
     val recentSpeakerNames: List<String> = emptyList(),
     val autoSync: Boolean = true,
+    val assistantBackend: AssistantBackend? = null,
+    val codex: AssistantModelSettings = AssistantModelSettings(),
+    val pi: AssistantModelSettings = AssistantModelSettings(),
 )
 
 /** Non-secret preferences as one JSON document; API keys go through [SecretStore]. */

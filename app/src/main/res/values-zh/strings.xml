@@ -37,7 +37,7 @@
   <string name="qwen_htp_failed">"Qwen3-ASR NPU 未能完成此片段，可重试或改选其他转写服务。"</string>
   <string name="no_local_npu_models">"此设备没有可用的本地 NPU 转写模型"</string>
   <string name="qwen_htp_hotwords_help">"Qwen3-ASR NPU 仅在生成纪要时使用这些术语。"</string>
-  <string name="assistant_config_required">"请先配置纪要服务，模型需要支持工具调用"</string>
+  <string name="assistant_config_required">"请先配置所选助手后端，并使用支持工具调用的模型"</string>
   <string name="assistant_failed">"录音助手查询失败，请重试"</string>
   <string name="assistant_intro">"助手会先查目录和原文，再给出带来源的回答。可以指定日期、人名，也可以比较不同会议。"</string>
   <string name="assistant_process">"思考与检索过程 · %1$s"</string>
@@ -288,6 +288,10 @@
   <string name="notes_service">"纪要服务"</string>
   <string name="notes_service_help">"用于生成摘要、待办、章节与 AI 问答。兼容 OpenAI Chat Completions 接口，例如 https://api.example.com/v1。只发送逐字稿文字，不上传音频。"</string>
   <string name="notes_service_privacy">"OpenAI 兼容接口 · 只发送逐字稿文字"</string>
+  <string name="repair_transcript">校对逐字稿断句</string>
+  <string name="repair_transcript_help">把同一说话人的连续识别片段发给此服务，修复断句和明显的识别错误。</string>
+  <string name="repairing_transcript">正在校对逐字稿 · %1$d/%2$d</string>
+  <string name="repair_transcript_failed">部分段落校对失败，已保留这些段落的原始转写。</string>
   <string name="notes_setup_help">"配置纪要服务后，可根据逐字稿生成摘要、待办与章节。只发送文字，不上传音频。"</string>
   <string name="notes_stale">"逐字稿、说话人或重点标记已更新，这份纪要可能已过期；可重新生成。"</string>
   <string name="notes_template">"纪要类型"</string>
@@ -545,4 +549,21 @@
     <string name="audio_not_found">本地音频不存在，请先同步录音</string>
     <string name="transcript_htp">已使用高通 HTP 转写</string>
     <string name="speaker_htp">已用高通 HTP 提取声纹 · %1$d 次</string>
+  <string name="assistant_all_recordings">全库问答</string>
+  <string name="assistant_this_recording">本录音问答</string>
+  <string name="assistant_ask_recording">问这条录音</string>
+  <string name="assistant_single_intro">从当前录音的逐字稿查找答案，并提供可回放的原文引用。</string>
+  <string name="assistant_draft">正在生成回答…</string>
+  <string name="assistant_jump_to_latest">跳到最新消息并恢复自动滚动</string>
+  <string name="assistant_cancelled">已停止</string>
+  <string name="assistant_clear_scope">清空当前会话的问答记录？</string>
+  <string name="assistant_open_all">去全库助手提问</string>
+    <string name="assistant_backend">AI 助手后端</string>
+    <string name="assistant_backend_unavailable">此后端需要支持 Landlock 的手机和包含该后端的安装包。</string>
+    <string name="assistant_built_in">内置助手</string>
+    <string name="assistant_default">自动</string>
+    <string name="assistant_url_required">请输入不含凭证、查询参数或片段的 HTTPS Base URL。</string>
+    <string name="assistant_pi_model_help">Pi 使用 Chat Completions 接口。Base URL 留空时沿用纪要服务的模型和 API Key。</string>
+    <string name="assistant_codex_model_help">Codex 使用 Responses API。请填写接口的 Base URL、模型和 API Key。</string>
+    <string name="assistant_node_requires_backend">运行 Node 脚本需要在 AI 助手后端中选择 Pi 或 Codex。</string>
 </resources>

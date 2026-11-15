@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import dev.soundsoftware.app.data.LlmSettings
+import dev.soundsoftware.app.data.AssistantBackend
+import dev.soundsoftware.app.data.AssistantModelSettings
 import dev.soundsoftware.app.data.RecordingRepository
 import dev.soundsoftware.app.data.RemoteAsrSettings
 import dev.soundsoftware.app.export.Exporter
@@ -40,6 +42,7 @@ sealed interface Screen {
     data object Assistant : Screen
     data object AsrService : Screen
     data object LlmService : Screen
+    data object AssistantSettings : Screen
 }
 
 enum class Tab { RECORDINGS, TODOS, DEVICE, ME }
@@ -59,11 +62,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val message = mutableMessage.asStateFlow()
     private val mutableAsking = MutableStateFlow(false)
     val asking = mutableAsking.asStateFlow()
-    val assistant = app.assistant.state
-    fun askAssistant(question: String) = app.assistant.ask(question)
-    fun cancelAssistant() = app.assistant.cancel()
-    fun newAssistantSession() = app.assistant.newSession()
-    fun clearAssistantHistory() = app.assistant.clearHistory()
+    fun assistantState(recordingId: String?) = app.assistant.stateFor(recordingId)
+    fun askAssistant(question: String, recordingId: String?) = app.assistant.ask(question, recordingId)
+    fun cancelAssistant(recordingId: String?, runId: String?) = app.assistant.cancel(recordingId, runId)
+    fun clearAssistantHistory(recordingId: String?) = app.assistant.clearHistory(recordingId)
     fun openCitation(ref: dev.soundsoftware.core.agent.RecordingCitation) = viewModelScope.launch {
         val valid = app.recordingIndex.resolve(ref)
         val r = app.repository.get(ref.recordingId)
@@ -148,6 +150,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteRecording(id: String) = viewModelScope.launch {
         if (playback.value.recordingId == id) app.playback.release()
         app.processor.deleteRecording(id)
+        app.assistant.recordingDeleted(id)
         stack.value = listOf(Screen.Main)
     }
 
@@ -177,6 +180,46 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         app.settings.update { it.copy(llm = llm.copy(baseUrl = llm.baseUrl.trim(), model = llm.model.trim())) }
         if (key != null) app.settings.secrets.put(Processor.KEY_LLM, key.trim())
     }.onFailure { say(it.message) }.isSuccess
+    fun assistantReady(): Boolean {
+        val config = settings.value
+        val source = when (config.assistantBackend) {
+            AssistantBackend.CODEX -> config.codex
+            AssistantBackend.PI -> config.pi.takeIf { it.baseUrl.isNotBlank() }
+            else -> null
+        }
+        return source?.let { it.baseUrl.isNotBlank() && it.model.isNotBlank() } ?: llmReady()
+    }
+
+    fun saveAssistant(backend: AssistantBackend?, pi: AssistantModelSettings, codex: AssistantModelSettings,
+        piKey: String, codexKey: String) = runCatching {
+        fun validate(profile: AssistantModelSettings): AssistantModelSettings {
+            val urlText = profile.baseUrl.trim()
+            val model = profile.model.trim()
+            if (urlText.isNotEmpty()) {
+                val url = urlText.toHttpUrl()
+                require((url.isHttps || Processor.debugLoopback(url)) && url.username.isEmpty() &&
+                    url.password.isEmpty() && url.query == null && url.fragment == null) {
+                    app.getString(R.string.assistant_url_required)
+                }
+                require(model.isNotEmpty()) { app.getString(R.string.enter_model_name) }
+            }
+            return AssistantModelSettings(urlText, model)
+        }
+        val newPi = validate(pi)
+        val newCodex = validate(codex)
+        require(backend != AssistantBackend.CODEX || newCodex.baseUrl.isNotEmpty()) {
+            app.getString(R.string.assistant_config_required)
+        }
+        val previous = settings.value
+        fun saveKey(name: String, key: String, oldUrl: String, url: String) {
+            if (url.isNotBlank() && key.isNotBlank()) app.settings.secrets.put(name, key.trim())
+            else if (oldUrl != url) app.settings.secrets.put(name, null)
+        }
+        saveKey(AssistantModelSettings.PI_KEY, piKey, previous.pi.baseUrl, newPi.baseUrl)
+        saveKey(AssistantModelSettings.CODEX_KEY, codexKey, previous.codex.baseUrl, newCodex.baseUrl)
+        app.settings.update { it.copy(assistantBackend = backend, pi = newPi, codex = newCodex) }
+    }.onFailure { say(it.message) }.isSuccess
+
     fun hasSecret(name: String) = app.settings.secrets.has(name)
 
     fun importAudio(uri: Uri) = viewModelScope.launch {

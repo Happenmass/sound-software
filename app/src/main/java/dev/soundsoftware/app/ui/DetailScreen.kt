@@ -408,7 +408,7 @@ private fun highlight(text: String, query: String) = buildAnnotatedString {
 
 @Composable
 private fun QaTab(vm: AppViewModel, r: Recording) {
-    AssistantContent(vm, suggestedQuestion = stringResource(R.string.suggest_recording_todos, vm.title(r)))
+    AssistantContent(vm, recordingId = r.id, recordingTitle = vm.title(r))
 }
 
 @Composable

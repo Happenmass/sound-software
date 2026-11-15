@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
                 Screen.Assistant -> AssistantScreen(vm)
                 Screen.AsrService -> AsrServiceScreen(vm)
                 Screen.LlmService -> LlmServiceScreen(vm)
+                Screen.AssistantSettings -> AssistantSettingsScreen(vm)
             }
             message?.let { text ->
                 LaunchedEffect(text) { delay(2600); if (vm.message.value == text) vm.say(null) }

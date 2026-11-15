@@ -23,8 +23,10 @@ deploy_diarization() {
   local target="$phone_models/diarization"
   [[ -f "$model_cache/sherpa-onnx-pyannote-segmentation-3-0/model.onnx" && -f "$model_cache/3dspeaker_eres2netv2_zh.onnx" ]] || { printf 'Missing diarization models in %s\n' "$model_cache" >&2; exit 1; }
   "$adb_tool" shell mkdir -p "$target"
+  "$adb_tool" shell chmod a+rx "$target"
   "$adb_tool" push "$model_cache/sherpa-onnx-pyannote-segmentation-3-0/model.onnx" "$target/segmentation.onnx"
   "$adb_tool" push "$model_cache/3dspeaker_eres2netv2_zh.onnx" "$target/embedding.onnx"
+  "$adb_tool" shell chmod a+r "$target/segmentation.onnx" "$target/embedding.onnx"
 }
 case "$selection" in
   sensevoice) deploy sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17 sensevoice ;;

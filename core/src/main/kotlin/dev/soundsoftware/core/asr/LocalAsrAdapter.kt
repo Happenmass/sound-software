@@ -1,5 +1,9 @@
 package dev.soundsoftware.core.asr
 
+import dev.soundsoftware.core.audio.PcmWav
+import dev.soundsoftware.core.transcript.SpeakerTurn
+import dev.soundsoftware.core.transcript.groupSpeakerTurns
+import dev.soundsoftware.core.vad.SpeechRange
 import dev.soundsoftware.core.vad.VoiceActivityDetector
 import dev.soundsoftware.core.vad.WholeRecordingVad
 import dev.soundsoftware.core.vad.splitSpeechRanges
@@ -25,6 +29,7 @@ interface LocalAsrRuntime : AutoCloseable {
 class LocalAsrAdapter(
     private val runtime: LocalAsrRuntime,
     private val vad: VoiceActivityDetector = WholeRecordingVad(),
+    private val speakerTurns: List<SpeakerTurn> = emptyList(),
 ) : AsrEngine {
     private val execution = Mutex()
     override val descriptor = AsrDescriptor(
@@ -38,37 +43,51 @@ class LocalAsrAdapter(
             validateOptions(request.options, descriptor.capabilities)
             context.onEvent(AsrEvent(AsrStage.PREPARING))
             val wav = validateAudio(request.audio)
-            require(runtime.maxSamples in 1..dev.soundsoftware.core.audio.PcmWav.MAX_WINDOW_SAMPLES)
-            val ranges = splitSpeechRanges(vad.detect(wav), runtime.maxSamples)
-            val key = checkpointKey(request, descriptor) + "|${vad.id}|${runtime.maxSamples}"
+            require(runtime.maxSamples in 1..PcmWav.MAX_WINDOW_SAMPLES)
+            val groups = groupSpeakerTurns(speakerTurns, wav.durationMs)
+            val inputPlan = if (groups.isEmpty()) vad.id else "speaker-turns-v2"
+            val batches = if (groups.isEmpty()) {
+                splitSpeechRanges(vad.detect(wav), runtime.maxSamples).map { RecognitionBatch(listOf(it)) }
+            } else groups.map { group ->
+                RecognitionBatch(speakerWindows(group, wav.sampleRate, runtime.maxSamples), group.first().speaker)
+            }
+            val key = checkpointKey(request, descriptor) + "|$inputPlan|${runtime.maxSamples}"
             val segments = mutableListOf<TranscriptSegment>()
             var loaded = false
-            for ((index, range) in ranges.withIndex()) {
-                currentCoroutineContext().ensureActive()
-                val partKey = "$key|${range.startSample}|${range.endSample}"
-                val cached = context.checkpoints.read(partKey)
-                val text = if (cached != null) cached else {
-                    if (!loaded) { runtime.prepare(); loaded = true }
+            var completed = 0
+            val total = batches.sumOf { it.windows.size }
+            for ((index, batch) in batches.withIndex()) {
+                val recognized = mutableListOf<String>()
+                for (range in batch.windows) {
                     currentCoroutineContext().ensureActive()
-                    val samples = wav.readMono(range.startSample, (range.endSample - range.startSample).toInt())
-                    val result = runtime.decode(samples, wav.sampleRate)
-                    currentCoroutineContext().ensureActive()
-                    result.text.trim().also { context.checkpoints.write(partKey, it) }
+                    val partKey = "$key|${range.startSample}|${range.endSample}"
+                    val text = context.checkpoints.read(partKey) ?: run {
+                        if (!loaded) { runtime.prepare(); loaded = true }
+                        currentCoroutineContext().ensureActive()
+                        val samples = wav.readMono(range.startSample, (range.endSample - range.startSample).toInt())
+                        val result = runtime.decode(samples, wav.sampleRate)
+                        currentCoroutineContext().ensureActive()
+                        result.text.trim().also { context.checkpoints.write(partKey, it) }
+                    }
+                    if (text.isNotBlank()) recognized += text
+                    completed++
+                    context.onEvent(AsrEvent(AsrStage.RECOGNIZING, completed.toDouble() / total))
                 }
-                if (text.isNotBlank()) {
+                if (recognized.isNotEmpty()) {
                     segments += TranscriptSegment(
-                        "part-$index", text, range.startSample * 1000 / wav.sampleRate,
-                        range.endSample * 1000 / wav.sampleRate,
+                        "part-$index", recognized.joinToString(" "), batch.windows.first().startSample * 1000 / wav.sampleRate,
+                        batch.windows.last().endSample * 1000 / wav.sampleRate,
+                        batch.speaker?.takeIf { it >= 0 }?.let { "spk-$it" },
+                        fragments = if (recognized.size > 1) recognized else emptyList(),
                     )
                 }
-                context.onEvent(AsrEvent(AsrStage.RECOGNIZING, (index + 1).toDouble() / ranges.size))
             }
             context.onEvent(AsrEvent(AsrStage.FINALIZING))
             AsrResult(
                 request.audio.id, request.audio.sha256, request.profileRevision,
                 segments.joinToString("\n") { it.text }, segments, TimestampQuality.APPROXIMATE_SEGMENT,
                 AsrProvenance(descriptor.id, runtime.modelId, runtime.runtimeName, runtime.backend),
-                warnings = listOf("时间戳为分析窗口范围，不是模型对齐；窗口边界识别质量尚需真录音验收", "VAD: ${vad.id}"),
+                warnings = listOf("时间戳为分析窗口范围，不是模型对齐；窗口边界识别质量尚需真录音验收", "VAD: $inputPlan"),
                 elapsedMs = (System.nanoTime() - started) / 1_000_000,
             ).validate(request)
         }
@@ -76,4 +95,21 @@ class LocalAsrAdapter(
 
     /** Call only after transcribe has returned/cancelled, never during native decode. */
     override fun close() { runtime.close() }
+}
+
+private data class RecognitionBatch(val windows: List<SpeechRange>, val speaker: Int? = null)
+
+private fun speakerWindows(turns: List<SpeakerTurn>, sampleRate: Int, maxSamples: Int): List<SpeechRange> {
+    val ranges = turns.map { SpeechRange(it.startMs * sampleRate / 1000, it.endMs * sampleRate / 1000) }
+    val maxGapSamples = 600L * sampleRate / 1000
+    val windows = mutableListOf<SpeechRange>()
+    for (range in splitSpeechRanges(ranges, maxSamples)) {
+        val last = windows.lastOrNull()
+        if (last != null && range.startSample - last.endSample <= maxGapSamples && range.endSample - last.startSample <= maxSamples) {
+            windows[windows.lastIndex] = last.copy(endSample = range.endSample)
+        } else {
+            windows += range
+        }
+    }
+    return windows
 }

@@ -14,8 +14,12 @@ for name,item in lock['models'].items():
 adb=['adb','-s',a.serial]
 subprocess.run(adb+['shell','pm','path',a.package],check=True,stdout=subprocess.DEVNULL)
 subprocess.run(adb+['shell','mkdir','-p',target],check=True)
+# On Honor's external storage, a directory created by adb starts out accessible
+# to shell but the app UID cannot traverse it until the mode is adjusted.
+subprocess.run(adb+['shell','chmod','a+rx',target],check=True)
 for name in lock['models']:
     subprocess.run(adb+['push',str(root/name),target+'/'+name],check=True)
+    subprocess.run(adb+['shell','chmod','a+r',target+'/'+name],check=True)
     actual=subprocess.check_output(adb+['shell','sha256sum',target+'/'+name],text=True).split()[0]
     if actual!=lock['models'][name]['sha256']:raise SystemExit('Phone model checksum mismatch: '+name)
 print('Verified speaker NPU weights deployed; CPU/ASR models and recordings were not changed')

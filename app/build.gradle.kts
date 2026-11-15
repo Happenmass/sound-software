@@ -8,6 +8,22 @@ val includeQnn = providers.gradleProperty("includeQnn").getOrElse("false").toBoo
 val includeSpeakerWorker = providers.gradleProperty("includeSpeakerWorker").getOrElse(includeQnn.toString()).toBoolean()
 val includeSpeakerNpu = providers.gradleProperty("includeSpeakerNpu").getOrElse((includeQnn && includeSpeakerWorker).toString()).toBoolean()
 val includeQwenHtp = providers.gradleProperty("includeQwenHtp").getOrElse("false").toBoolean()
+val includePi = providers.gradleProperty("includePi").getOrElse("false").toBoolean()
+val codexArchive = providers.gradleProperty("codexArchive").orNull?.let(rootProject::file)
+val includeAgentSandbox = includePi || codexArchive != null
+val preparePi by tasks.registering(Exec::class) {
+    val source = rootProject.file("tools/pi-agent")
+    val sdk = android.sdkDirectory
+    val jni = layout.buildDirectory.dir("generated/piJni")
+    val assets = layout.buildDirectory.dir("generated/piAssets")
+    inputs.files(fileTree(source) { include("*.mjs", "*.json", "*.cc", "*.py") })
+    inputs.files(rootProject.file("tools/codex-phone-probe/node-main.cc"), rootProject.file("tools/codex-phone-probe/sandbox.c"))
+    codexArchive?.let { inputs.file(it) }
+    outputs.dirs(jni, assets)
+    commandLine("python3", source.resolve("build.py"), "--ndk", sdk.resolve("ndk/28.2.13676358"),
+        "--jni", jni.get().asFile, "--assets", assets.get().asFile)
+    codexArchive?.let { args("--codex", it) }
+}
 val includeAsrWeights = providers.gradleProperty("includeAsrWeights").getOrElse("false").toBoolean()
 val prepareAsrWeights by tasks.registering(Exec::class) {
     val output = layout.buildDirectory.dir("generated/bundledAsrAssets")
@@ -69,10 +85,12 @@ android {
         buildConfigField("boolean", "SPEAKER_WORKER_ENABLED", includeSpeakerWorker.toString())
         buildConfigField("boolean", "SPEAKER_NPU_ENABLED", includeSpeakerNpu.toString())
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
+        buildConfigField("boolean", "PI_ENABLED", includePi.toString())
+        buildConfigField("boolean", "CODEX_ENABLED", (codexArchive != null).toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
         versionCode = 7
         versionName = "0.1.5"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -82,7 +100,10 @@ android {
             versionNameSuffix = ""
             isDebuggable = false
         }
-        debug { versionNameSuffix = "-dev" }
+        debug {
+            versionNameSuffix = "-dev"
+            applicationIdSuffix = providers.gradleProperty("debugApplicationIdSuffix").orNull
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -100,6 +121,12 @@ android {
     if (includeQwenHtp) {
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qwenHtpJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenHtpAssets"))
+    }
+    if (includeAgentSandbox) {
+        sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/piJni"))
+        sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/piAssets"))
+        packaging.jniLibs.keepDebugSymbols += "**/libsound_agent_codex.so"
+        packaging.jniLibs.pickFirsts += "**/libc++_shared.so"
     }
     if (includeQnn) sourceSets.getByName("androidTest").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerProbeJni"))
     if (includeSpeakerWorker) sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerJni"))
@@ -133,6 +160,7 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
@@ -146,6 +174,7 @@ if (includeQnn) tasks.matching { it.name == "mergeDebugAndroidTestJniLibFolders"
 if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu, prepareSpeakerNpuNotices) }
 
 if (includeQwenHtp) tasks.named("preBuild").configure { dependsOn(prepareQwenHtp) }
+if (includeAgentSandbox) tasks.named("preBuild").configure { dependsOn(preparePi) }
 
 if (includeAsrWeights) {
     require(includeQnn && includeQwenHtp) { "Bundled ASR weights require both NPU engines." }

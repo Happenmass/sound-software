@@ -41,7 +41,14 @@ data class AsrOptions(
     val textNormalization: Boolean = false,
 )
 data class AsrRequest(val jobId: String, val attemptId: String, val audio: AudioInput, val profileRevision: String, val options: AsrOptions = AsrOptions())
-data class TranscriptSegment(val id: String, val text: String, val startMs: Long? = null, val endMs: Long? = null, val speaker: String? = null)
+data class TranscriptSegment(
+    val id: String,
+    val text: String,
+    val startMs: Long? = null,
+    val endMs: Long? = null,
+    val speaker: String? = null,
+    val fragments: List<String> = emptyList(),
+)
 data class AsrProvenance(val adapterId: String, val model: String, val runtime: String, val backend: String)
 data class AsrResult(
     val audioId: String,
