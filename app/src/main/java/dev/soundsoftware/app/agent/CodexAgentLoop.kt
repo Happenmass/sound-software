@@ -75,7 +75,7 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
                 onEvent(AssistantEvent.ToolProgress(step))
                 return result
             }
-            val mcp = if (sandbox.recordingMcpEnabled && workspace == null) RecordingMcpBridge { name, arguments ->
+            val mcp = if (workspace == null) RecordingMcpBridge { name, arguments ->
                 executeTool(UUID.randomUUID().toString(), name, arguments)
             } else null
             val next = mcp.use { CodexModelRelay(base, apiKey, httpClient).use { relay ->

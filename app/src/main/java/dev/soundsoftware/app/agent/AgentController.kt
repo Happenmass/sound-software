@@ -169,7 +169,7 @@ class AgentController(
                         val test = BuildConfig.DEBUG && url.host in setOf("localhost", "127.0.0.1", "10.0.2.2")
                         val model = HttpAgentModel(LlmConfig(url, config.model, allowInsecureForTests = test, outputLanguage = language),
                             apiKey, client = httpClient, onRequestMessages = testRequestObserver.takeIf { BuildConfig.DEBUG },
-                            toolSchemas = if (NodeWorkspaceTool.requested(question)) NodeWorkspaceTool.schemas else AgentToolSchemas.json)
+                            toolSchemas = NodeWorkspaceTool.schemas)
                         pi.command("ask", recordingId, index, sessionId,
                             question, language, model, ::publish)
                     }

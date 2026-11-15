@@ -107,7 +107,6 @@ class AgentRuntimeHandoffTest {
         val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as SoundApplication
         assumeTrue(InstrumentationRegistry.getArguments().getString("agentPhone") == "true")
         check(app.packageName.endsWith(".agentcleanup") || app.packageName.endsWith(".agentcleanup.mcppoc"))
-        assumeTrue(AgentSandbox(app).recordingMcpEnabled)
         ActivityScenario.launch(MainActivity::class.java).use {
             val keyword = "ScopeFixture"
             fun record(id: String, label: String) = Recording(id, 0, 1000, stage = ProcessingStage.DONE,

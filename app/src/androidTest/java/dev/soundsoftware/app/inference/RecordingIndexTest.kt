@@ -37,6 +37,13 @@ class RecordingIndexTest {
         val tools = index.toolsFor(a.id)
         val scoped = tools.execute("search_recordings", buildJsonObject { put("query", "上线") })
         assertEquals(a.id, scoped.getValue("evidence").jsonArray.single().jsonObject.getValue("recordingId").jsonPrimitive.content)
+        val withoutFilters = tools.execute("search_recordings", buildJsonObject {
+            put("query", "上线")
+            for (key in listOf("recordingId", "limit", "offset", "afterMs", "beforeMs", "speaker")) put(key, JsonNull)
+        })
+        assertEquals(scoped, withoutFilters)
+        assertTrue(tools.execute("search_recordings", buildJsonObject { put("query", "上线"); put("beforeMs", 0) })
+            .getValue("evidence").jsonArray.isEmpty())
         assertTrue(runCatching { tools.execute("read_segments", buildJsonObject { put("recordingId", b.id) }) }.isFailure)
         index.remove(evidence.recordingId)
         assertNull(index.latestSession(evidence.recordingId))

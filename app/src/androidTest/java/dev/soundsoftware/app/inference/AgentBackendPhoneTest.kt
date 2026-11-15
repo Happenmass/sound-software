@@ -8,6 +8,7 @@ import dev.soundsoftware.app.MainActivity
 import dev.soundsoftware.app.R
 import dev.soundsoftware.app.SoundApplication
 import dev.soundsoftware.app.agent.AgentSandbox
+import dev.soundsoftware.app.agent.RecordingMcpBridge
 import dev.soundsoftware.app.data.AssistantBackend
 import dev.soundsoftware.app.data.AssistantModelSettings
 import dev.soundsoftware.core.audio.PcmWav
@@ -56,19 +57,7 @@ class AgentBackendPhoneTest {
         compose.waitUntil(10_000) { app.assistant.state.value.ready }
         val stamp = UUID.randomUUID().toString().take(8)
         val keyword = "Beacon$stamp"
-        val fixtures = listOf("A", "B").map { label ->
-            Recording(id = UUID.randomUUID().toString(), createdAt = System.currentTimeMillis(),
-                durationMs = 5_000, title = "MCP $label $stamp", stage = ProcessingStage.DONE,
-                transcript = Transcript(listOf(Segment("mcp-$label", "$keyword synthetic recording $label.", 1_000, 2_000)),
-                    "fixture", "test", "SEGMENT", 0))
-        }
-        val (a, b) = fixtures
-        runBlocking(Dispatchers.IO) {
-            fixtures.forEach {
-                PcmWav.writeMono(app.repository.audioFile(it.id), FloatArray(80_000), 16_000)
-                app.repository.add(it)
-            }
-        }
+        val (a, b) = addMcpRecordings(stamp, keyword)
         listOf("Pi", "Codex").forEachIndexed { index, backend ->
             val scoped = ScopedMcpFixture(a, b, keyword)
             MockWebServer().use { server ->
@@ -76,15 +65,10 @@ class AgentBackendPhoneTest {
                 server.start()
                 configure(backend, "http://localhost:${server.port}/v1",
                     if (backend == "Pi") "fixture-pi-model" else "gpt-5.4", "fixture-key")
-                compose.onNodeWithText(checkNotNull(a.title)).activate()
-                compose.onNodeWithText(activity.getString(R.string.ai_qa)).activate()
-                compose.onNodeWithText(activity.getString(R.string.assistant_this_recording)).assertExists()
+                openMcpRecording(a)
                 val state = app.assistant.stateFor(a.id)
                 compose.waitUntil(10_000) { state.value.ready }
-                val placeholder = activity.getString(R.string.ask_recordings_placeholder)
-                compose.onNode(hasSetTextAction() and hasText(placeholder, substring = true))
-                    .performTextInput("Check $keyword using recording tools for the current recording.")
-                compose.onNodeWithContentDescription(activity.getString(R.string.send)).activate()
+                submitInAssistant("Check $keyword using recording tools for the current recording.")
                 compose.waitUntil(35_000) { scoped.failure != null || state.value.error != null || state.value.session.turns.size > index }
                 scoped.failure?.let { throw AssertionError("$backend model fixture rejected the exchange", it) }
                 assertNull(state.value.error)
@@ -98,6 +82,109 @@ class AgentBackendPhoneTest {
                 if (index == 0) compose.onNodeWithContentDescription(activity.getString(R.string.back)).activate()
             }
         }
+    }
+
+    @Test fun realModelsUseScopedStdioRecordingMcp() {
+        val args = InstrumentationRegistry.getArguments()
+        assumeTrue(args.getString("agentPhone") == "true" && args.getString("liveModel") == "true")
+        check(app.packageName.endsWith(".mcppoc") && app.instrumentationDataDir != null && sandbox.supported)
+        val base = requireNotNull(args.getString("liveBase"))
+        val model = requireNotNull(args.getString("liveModelName"))
+        val keyFile = File(app.cacheDir, "agent-live-key")
+        val key = keyFile.readText().trim().also { keyFile.delete() }
+        compose.waitUntil(10_000) { app.assistant.state.value.ready }
+        assertTrue("Live MCP requires a fresh synthetic recording library", app.repository.recordings.value.isEmpty())
+        val stamp = UUID.randomUUID().toString().take(8)
+        val keyword = "Larkspur"
+        val (a, b) = addMcpRecordings(stamp, keyword)
+        val previous = app.settings.state.value
+        val keys = listOf(AssistantModelSettings.PI_KEY, AssistantModelSettings.CODEX_KEY)
+        val previousKeys = keys.associateWith(app.settings.secrets::get)
+        val catalogs = java.util.concurrent.CopyOnWriteArrayList<Set<String>>()
+        val expected = setOf("list_highlights", "list_recordings", "list_todos", "read_segments", "search_recordings")
+        try {
+            RecordingMcpBridge.testCatalogObserver = { catalog ->
+                catalogs += catalog.map { it.jsonObject.getValue("function").jsonObject.getValue("name").jsonPrimitive.content }.toSet()
+            }
+            listOf("Pi", "Codex").forEachIndexed { index, backend ->
+                configure(backend, base, model, key)
+                openMcpRecording(a)
+                val state = app.assistant.stateFor(a.id)
+                compose.waitUntil(10_000) { state.value.ready }
+                if (index > 0) {
+                    val previousSession = state.value.session.id
+                    compose.runOnIdle { app.assistant.clearHistory(a.id) }
+                    compose.waitUntil(10_000) { !state.value.busy && state.value.session.id != previousSession }
+                }
+                fun ask(question: String): dev.soundsoftware.core.agent.AgentTurn {
+                    val count = state.value.session.turns.size
+                    submitInAssistant(question)
+                    compose.waitUntil(100_000) { !state.value.busy && (state.value.error != null || state.value.session.turns.size > count) }
+                    assertNull("$backend reported ${state.value.error}", state.value.error)
+                    return state.value.session.turns.last()
+                }
+
+                val turn = ask("Use search_recordings in the current synthetic recording with query exactly '$keyword'. " +
+                    "Use that single keyword and omit optional filters or set them to null. Quote and cite the passage returned by the tool.")
+                val aResult = turn.trace.firstOrNull { it.toolName == "search_recordings" && it.status == "done" }
+                assertNotNull("$backend did not execute search_recordings: ${turn.trace}", aResult)
+                val passages = Json.parseToJsonElement(checkNotNull(aResult?.result)).jsonObject.getValue("evidence").jsonArray
+                assertEquals("$backend search arguments: ${aResult?.arguments}", listOf(a.id),
+                    passages.map { it.jsonObject.getValue("recordingId").jsonPrimitive.content })
+                assertTrue("$backend did not return an Android-verified A citation", turn.citations.isNotEmpty())
+                assertTrue(turn.citations.all { it.recordingId == a.id })
+
+                val listedOnSearch = catalogs.toList()
+                assertTrue("$backend did not request the MCP catalog", listedOnSearch.isNotEmpty())
+                assertTrue("$backend did not discover all five MCP tools", listedOnSearch.all { it == expected })
+                catalogs.clear()
+                val permission = ask("Run a read-only permission probe on these synthetic fixtures. Invoke read_segments exactly once " +
+                    "with recordingId ${b.id} and limit 1. This candidate ID is intentionally supplied for a negative permissions test. " +
+                    "Send that ID exactly so Android can verify and deny access. Report the tool's actual error if denied. " +
+                    "Do not substitute the current recording ID or try another way to access it.")
+                val toolSteps = permission.trace.filter { it.toolName != null }
+                val denial = toolSteps.firstOrNull { it.toolName == "read_segments" &&
+                    it.arguments?.let { args -> Json.parseToJsonElement(args).jsonObject["recordingId"] } == JsonPrimitive(b.id) }
+                assertNotNull("$backend did not send the explicit B ID: $toolSteps", denial)
+                assertEquals("failed", denial?.status)
+                val error = Json.parseToJsonElement(checkNotNull(denial?.result)).jsonObject
+                assertEquals(JsonPrimitive("recording_scope_denied"), error["code"])
+                assertFalse("B call returned evidence", "evidence" in error)
+                assertTrue("$backend did not discover all five MCP tools for the negative probe",
+                    catalogs.isNotEmpty() && catalogs.all { it == expected })
+                catalogs.clear()
+                InstrumentationRegistry.getInstrumentation().sendStatus(0, android.os.Bundle().apply {
+                    putString("stream", "\nLive $backend stdio MCP: ${expected.sorted().joinToString()}, verified A citation, explicit B ID called, Android scope denied\n")
+                })
+                if (index == 0) compose.onNodeWithContentDescription(activity.getString(R.string.back)).activate()
+            }
+        } finally {
+            RecordingMcpBridge.testCatalogObserver = null
+            previousKeys.forEach { (name, oldKey) -> app.settings.secrets.put(name, oldKey) }
+            app.settings.update { it.copy(assistantBackend = previous.assistantBackend, pi = previous.pi, codex = previous.codex) }
+        }
+    }
+
+    private fun openMcpRecording(recording: Recording) {
+        compose.onNodeWithText(checkNotNull(recording.title)).activate()
+        compose.onNodeWithText(activity.getString(R.string.ai_qa)).activate()
+        compose.onNodeWithText(activity.getString(R.string.assistant_this_recording)).assertExists()
+    }
+
+    private fun addMcpRecordings(stamp: String, keyword: String): List<Recording> {
+        val fixtures = listOf("A", "B").map { label ->
+            Recording(id = UUID.randomUUID().toString(), createdAt = System.currentTimeMillis(),
+                durationMs = 5_000, title = "MCP $label $stamp", stage = ProcessingStage.DONE,
+                transcript = Transcript(listOf(Segment("mcp-$label", "$keyword synthetic recording $label.", 1_000, 2_000)),
+                    "fixture", "test", "SEGMENT", 0))
+        }
+        runBlocking(Dispatchers.IO) {
+            fixtures.forEach {
+                PcmWav.writeMono(app.repository.audioFile(it.id), FloatArray(80_000), 16_000)
+                app.repository.add(it)
+            }
+        }
+        return fixtures
     }
 
     @Test fun workspacesSurviveTurnsAndRemainScoped() = runBlocking(Dispatchers.IO) {
@@ -471,6 +558,10 @@ class AgentBackendPhoneTest {
             compose.onNode(hasScrollToIndexAction()).performScrollToNode(ai)
         }
         compose.onNode(ai).activate()
+        submitInAssistant(text)
+    }
+
+    private fun submitInAssistant(text: String) {
         val placeholder = activity.getString(R.string.ask_recordings_placeholder)
         compose.onNode(hasSetTextAction() and hasText(placeholder, substring = true)).performTextInput(text)
         compose.onNodeWithContentDescription(activity.getString(R.string.send)).activate()
@@ -564,7 +655,8 @@ class AgentBackendPhoneTest {
             if (value is JsonObject) {
                 val name = (value["name"] as? JsonPrimitive)?.content
                 val ns = if ((value["type"] as? JsonPrimitive)?.content == "namespace") name else namespace
-                if (name == expected || name?.endsWith("__$expected") == true) return name to namespace
+                if (("parameters" in value || "inputSchema" in value) &&
+                    (name == expected || name?.endsWith("__$expected") == true)) return name to namespace
                 value.values.forEach { child -> toolDefinition(child, expected, ns)?.let { return it } }
             } else if (value is JsonArray) value.forEach { child -> toolDefinition(child, expected, namespace)?.let { return it } }
             return null
@@ -600,7 +692,7 @@ class AgentBackendPhoneTest {
                     }))
                 }.toString()
             }
-            val declared = toolDefinition(body["tools"] ?: JsonArray(emptyList()), if (script == null) "search_recordings" else "run_node")
+            val declared = toolDefinition(body, if (script == null) "search_recordings" else "run_node")
             val toolName = plan?.name ?: declared?.first ?: if (script == null) "search_recordings" else "run_node"
             val args = (plan?.arguments ?: buildJsonObject {
                 if (script == null) put("query", keyword) else put("script", script)

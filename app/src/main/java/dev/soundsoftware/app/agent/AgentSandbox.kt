@@ -23,7 +23,6 @@ class AgentSandbox(private val context: Context, private val dataDir: File = con
     private val launcher = File(native, "libsound_agent_sandbox.so")
     internal val node = File(native, "libsound_agent_node.so").absolutePath
     internal val codex = File(native, "libsound_agent_codex.so").absolutePath
-    internal val recordingMcpEnabled = BuildConfig.DEBUG && context.packageName.endsWith(".mcppoc")
 
     internal val supported: Boolean by lazy {
         (BuildConfig.PI_ENABLED || BuildConfig.CODEX_ENABLED) && runCatching {

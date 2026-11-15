@@ -19,6 +19,10 @@ import okio.source
 
 /** One private App endpoint for a stdio MCP worker. The executor already holds the recording scope. */
 internal class RecordingMcpBridge(private val execute: suspend (String, JsonObject) -> JsonObject) : Closeable {
+    companion object {
+        @Volatile internal var testCatalogObserver: ((JsonArray) -> Unit)? = null
+    }
+
     private val server = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1"))
     private val token = UUID.randomUUID().toString()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -37,7 +41,9 @@ internal class RecordingMcpBridge(private val execute: suspend (String, JsonObje
                         check(request["token"] == JsonPrimitive(token)) { "Invalid recording MCP connection" }
                         when (request["operation"]?.jsonPrimitive?.content) {
                             "list" -> buildJsonObject {
-                                put("schemas", AgentToolSchemas.json)
+                                val catalog = AgentToolSchemas.json
+                                testCatalogObserver?.invoke(catalog)
+                                put("schemas", catalog)
                             }
                             "call" -> execute(request.getValue("name").jsonPrimitive.content,
                                 request.getValue("arguments").jsonObject)

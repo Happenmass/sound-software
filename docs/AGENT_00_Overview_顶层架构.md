@@ -170,9 +170,11 @@ Magic V6 原签名覆盖 v0.1.12 后，设置页实测仅显示 Pi 和 Codex。�
 同日清理与回归结果见 [历史残留审计及修复](validation/legacy-agent-audit-2026-11-15.md#同日修复与验收结果)。实际 Pi/Codex 交接、合成 200k 分支、后台排队/取消与旧 qa 迁移已验；真实大上下文质量及系统低内存回收仍需专项验收。
 ### 录音工具 stdio MCP 真机验证
 
-实验仅在 `.mcppoc` 调试包启用，构建时在前述 debug 命令中改用 `-PdebugApplicationIdSuffix=.mcppoc`。Pi 以 SDK 的 stdio 客户端执行 `tools/list` 和 `tools/call`。Codex 0.165.0 读取本轮 `mcp_servers.recordings` 配置，使用原生 MCP 客户端启动同一个桥接进程。桥接通过本轮授权的 IPv4 回环端口向 Android 查目录和执行工具。Android 按入口绑定 `RecordingIndex.toolsFor(recordingId)`，记录本轮证据并核对最终引用。录音数据库留在 Android 主进程的权限范围。
+录音问答默认用 stdio MCP。Pi 以 SDK 的 stdio 客户端执行 `tools/list` 和 `tools/call`。Codex 0.165.0 读取本轮 `mcp_servers.recordings` 配置，使用原生 MCP 客户端启动同一个桥接进程。桥接通过本轮授权的 IPv4 回环端口向 Android 查目录和执行工具。Android 按入口绑定 `RecordingIndex.toolsFor(recordingId)`，记录本轮证据并核对最终引用。录音数据库留在 Android 主进程的权限范围。可选查询参数的 JSON `null` 表示省略，显式时间戳 `0` 仍参与过滤。
 
-Magic V6 上运行 `AgentBackendPhoneTest.stdioMcpDiscoversFiveToolsAndRejectsAnotherRecording`（`-e agentPhone true`）。独立库包含两条原文带相同关键词的合成录音。对 Pi 和 Codex，模型请求均含 MCP 发现的五个工具。在录音 A 的问答页，模拟模型先调用 `search_recordings`，返回且核验了 A 的引用。随后显式传入 B 的 ID 调用 `read_segments`，Android 返回 `recording_scope_denied`，结果无录音证据。签名正式包 v0.1.12 的设备 APK 摘要与原产物一致。
+首次真机验收使用 `.mcppoc` 调试包，构建时在前述 debug 命令中改用 `-PdebugApplicationIdSuffix=.mcppoc`。Magic V6 上运行 `AgentBackendPhoneTest.stdioMcpDiscoversFiveToolsAndRejectsAnotherRecording`（`-e agentPhone true`）。独立库包含两条原文带相同关键词的合成录音。对 Pi 和 Codex，模拟模型均发现五个工具，在录音 A 的问答页读到 A 的证据，传 B 的 ID 时收到 Android 的 `recording_scope_denied`。
+
+真实模型复验使用同一独立包名和新建的两条合成录音。`AgentBackendPhoneTest.realModelsUseScopedStdioRecordingMcp` 在 Magic V6 上通过。Pi 经 Chat Completions、Codex 经 Responses 请求真实 `gpt-6.1-sol`，两边的 `tools/list` 均返回五项。Codex 在后续模型请求中按需带上选中的工具。两边在录音 A 的页面通过 `search_recordings` 获得经 Android 核验的 A 引用，再通过 `read_segments` 显式提交 B 的 ID。Android 返回 `recording_scope_denied` 和无证据结果。临时网关经 USB 中转模型请求，并为负向探针补充专用模型提示，使模型实际发出该调用。权限校验在手机上执行。设备正式 v0.1.12 APK 摘要与签名基线一致。
 
 ### Pi GUI 项目的桥接
 

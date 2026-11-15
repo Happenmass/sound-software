@@ -241,7 +241,8 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
 
     fun toolsFor(recordingId: String?): RecordingTools = if (recordingId == null) this else object : RecordingTools {
         override suspend fun execute(name: String, arguments: JsonObject): JsonObject {
-            if (arguments["recordingId"]?.let { it != JsonPrimitive(recordingId) } == true) throw RecordingScopeDenied()
+            val supplied = arguments["recordingId"]
+            if (supplied != null && supplied != JsonNull && supplied != JsonPrimitive(recordingId)) throw RecordingScopeDenied()
             return this@RecordingIndex.execute(name, JsonObject(arguments + ("recordingId" to JsonPrimitive(recordingId))))
         }
 
@@ -251,10 +252,11 @@ class RecordingIndex(file: File) : RecordingProjection, RecordingTools, Closeabl
     suspend fun count() = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) { db.rawQuery("SELECT count(*) FROM recordings",null).use { it.moveToFirst();it.getInt(0) } } }
 
     override suspend fun execute(name: String, arguments: JsonObject): JsonObject = withContext(Dispatchers.IO) { synchronized(this@RecordingIndex) { query(name, arguments) } }
-    private fun query(name: String, a: JsonObject): JsonObject {
+    private fun query(name: String, arguments: JsonObject): JsonObject {
         val common=setOf("limit","offset","recordingId","afterMs","beforeMs","speaker")
         val allowed=when(name) { "list_recordings"->common+"title";"search_recordings"->common+"query";"read_segments"->setOf("limit","offset","recordingId");"list_todos"->common+setOf("done","owner");"list_highlights"->common;else->error("未知工具") }
-        require(a.keys.all { it in allowed })
+        require(arguments.keys.all { it in allowed })
+        val a = JsonObject(arguments.filterValues { it != JsonNull })
         fun int(key:String,default:Int)=a[key]?.jsonPrimitive?.int ?: default
         fun str(key:String)=a[key]?.jsonPrimitive?.also { require(it.isString) }?.content
         val limit=int("limit",3);val offset=a["offset"]?.jsonPrimitive?.long ?: 0L

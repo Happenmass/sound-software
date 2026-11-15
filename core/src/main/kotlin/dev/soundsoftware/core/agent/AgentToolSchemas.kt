@@ -7,7 +7,16 @@ object AgentToolSchemas {
         put("type", "function"); putJsonObject("function") {
             put("name", name); put("description", description); putJsonObject("parameters") {
                 put("type", "object"); put("additionalProperties", false)
-                put("properties", JsonObject(fields)); put("required", JsonArray(required.map(::JsonPrimitive)))
+                putJsonObject("properties") {
+                    for ((key, field) in fields) {
+                        if (key in required) put(key, field)
+                        else putJsonObject(key) {
+                            put("type", JsonArray(listOf(field.getValue("type"), JsonPrimitive("null"))))
+                            put("description", field.getValue("description").jsonPrimitive.content + " Pass null to leave this unset.")
+                        }
+                    }
+                }
+                put("required", JsonArray(required.map(::JsonPrimitive)))
             }
         }
     }

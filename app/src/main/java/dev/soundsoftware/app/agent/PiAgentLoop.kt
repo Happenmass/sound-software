@@ -33,7 +33,7 @@ class PiAgentLoop(private val sandbox: AgentSandbox) {
             (result["evidence"] as? JsonArray)?.forEach { receipts += json.decodeFromJsonElement<RecordingCitation>(it) }
             return result
         }
-        val mcp = if (sandbox.recordingMcpEnabled && action == "ask" && workspace == null) RecordingMcpBridge(::execute) else null
+        val mcp = if (action == "ask" && workspace == null) RecordingMcpBridge(::execute) else null
         mcp.use {
             sandbox.startPi(recordingId, mcp).use { child ->
                 child.send(buildJsonObject {
@@ -43,7 +43,7 @@ class PiAgentLoop(private val sandbox: AgentSandbox) {
                     question?.let { put("question", it) }
                     if (action == "ask") {
                         if (mcp != null) put("recordingMcpCommand", sandbox.node)
-                        else put("schemas", if (workspace != null) NodeWorkspaceTool.schemas else AgentToolSchemas.json)
+                        else put("schemas", NodeWorkspaceTool.schemas)
                         put("systemPrompt", workspace?.let { NodeWorkspaceTool.prompt(language) } ?: AgentPrompts.SYSTEM)
                         put("compactionPrompt", AgentPrompts.COMPACT)
                         put("language", language)
