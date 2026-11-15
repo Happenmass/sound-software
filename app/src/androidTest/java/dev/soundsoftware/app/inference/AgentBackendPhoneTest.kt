@@ -87,11 +87,13 @@ class AgentBackendPhoneTest {
     @Test fun realModelsUseScopedStdioRecordingMcp() {
         val args = InstrumentationRegistry.getArguments()
         assumeTrue(args.getString("agentPhone") == "true" && args.getString("liveModel") == "true")
-        check(app.packageName.endsWith(".mcppoc") && app.instrumentationDataDir != null && sandbox.supported)
+        check(app.packageName.endsWith(".mcppoc") || app.packageName.endsWith(".release"))
+        check(app.instrumentationDataDir != null && app.instrumentationIsolateSettings && sandbox.supported)
         val base = requireNotNull(args.getString("liveBase"))
         val model = requireNotNull(args.getString("liveModelName"))
         val keyFile = File(app.cacheDir, "agent-live-key")
-        val key = keyFile.readText().trim().also { keyFile.delete() }
+        val key = keyFile.takeIf { it.isFile }?.let { it.readText().trim().also { _ -> it.delete() } }
+            ?: requireNotNull(args.getString("liveKey")) { "Provide the temporary model gateway key." }
         compose.waitUntil(10_000) { app.assistant.state.value.ready }
         assertTrue("Live MCP requires a fresh synthetic recording library", app.repository.recordings.value.isEmpty())
         val stamp = UUID.randomUUID().toString().take(8)
