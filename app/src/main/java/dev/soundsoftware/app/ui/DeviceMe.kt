@@ -213,11 +213,9 @@ fun LlmServiceScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun assistantBackendName(backend: AssistantBackend?): String = when (backend) {
+private fun assistantBackendName(backend: AssistantBackend): String = when (backend) {
     AssistantBackend.PI -> "Pi"
     AssistantBackend.CODEX -> "Codex"
-    AssistantBackend.BUILT_IN -> stringResource(R.string.assistant_built_in)
-    null -> stringResource(R.string.assistant_default)
 }
 
 @Composable
@@ -230,14 +228,11 @@ fun AssistantSettingsScreen(vm: AppViewModel) {
     var codexUrl by rememberSaveable { mutableStateOf(settings.codex.baseUrl) }
     var codexModel by rememberSaveable { mutableStateOf(settings.codex.model) }
     var codexKey by remember { mutableStateOf("") }
-    val choices = buildList<AssistantBackend?> {
-        add(null)
+    val choices = buildList {
         if (BuildConfig.PI_ENABLED || backend == AssistantBackend.PI) add(AssistantBackend.PI)
         if (BuildConfig.CODEX_ENABLED || backend == AssistantBackend.CODEX) add(AssistantBackend.CODEX)
-        add(AssistantBackend.BUILT_IN)
     }
     val selectingPi = backend == AssistantBackend.PI
-    val selectingCodex = backend == AssistantBackend.CODEX
     Column(Modifier.fillMaxSize().background(C.PageBg).statusBarsPadding().navigationBarsPadding().imePadding()) {
         TopBar(stringResource(R.string.assistant_backend), onBack = { vm.back() })
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -250,20 +245,16 @@ fun AssistantSettingsScreen(vm: AppViewModel) {
                     }) { backend = choice }
                 }
             }
-            if (selectingPi || selectingCodex) {
-                T(stringResource(if (selectingPi) R.string.assistant_pi_model_help else R.string.assistant_codex_model_help),
-                    ts(13, 400, C.Muted))
-                T("Base URL", ts(13, 400, C.Muted))
-                Field(if (selectingPi) piUrl else codexUrl, { if (selectingPi) piUrl = it else codexUrl = it }, "https://…/v1", keyboard = KeyboardType.Uri)
-                T(stringResource(R.string.model), ts(13, 400, C.Muted))
-                Field(if (selectingPi) piModel else codexModel, { if (selectingPi) piModel = it else codexModel = it }, "")
-                val hasKey = vm.hasSecret(if (selectingPi) AssistantModelSettings.PI_KEY else AssistantModelSettings.CODEX_KEY)
-                T("API Key" + if (hasKey) stringResource(R.string.key_saved_hint) else "", ts(13, 400, C.Muted))
-                Field(if (selectingPi) piKey else codexKey, { if (selectingPi) piKey = it else codexKey = it },
-                    if (hasKey) "••••••••" else "sk-…", secret = true)
-            } else {
-                SettingRow(stringResource(R.string.notes_service), chevron = true, divider = false) { vm.push(Screen.LlmService) }
-            }
+            T(stringResource(if (selectingPi) R.string.assistant_pi_model_help else R.string.assistant_codex_model_help),
+                ts(13, 400, C.Muted))
+            T("Base URL", ts(13, 400, C.Muted))
+            Field(if (selectingPi) piUrl else codexUrl, { if (selectingPi) piUrl = it else codexUrl = it }, "https://…/v1", keyboard = KeyboardType.Uri)
+            T(stringResource(R.string.model), ts(13, 400, C.Muted))
+            Field(if (selectingPi) piModel else codexModel, { if (selectingPi) piModel = it else codexModel = it }, "")
+            val hasKey = vm.hasSecret(if (selectingPi) AssistantModelSettings.PI_KEY else AssistantModelSettings.CODEX_KEY)
+            T("API Key" + if (hasKey) stringResource(R.string.key_saved_hint) else "", ts(13, 400, C.Muted))
+            Field(if (selectingPi) piKey else codexKey, { if (selectingPi) piKey = it else codexKey = it },
+                if (hasKey) "••••••••" else "sk-…", secret = true)
         }
         Box(Modifier.padding(16.dp)) {
             PillButton(stringResource(R.string.save)) {

@@ -368,6 +368,11 @@ class AgentBackendPhoneTest {
     private fun configure(name: String, base: String? = null, model: String = "", key: String = "") {
         compose.onNodeWithContentDescription(activity.getString(R.string.settings)).activate()
         compose.onNodeWithText(activity.getString(R.string.assistant_backend)).performScrollTo().activate()
+        compose.onNodeWithContentDescription("Pi").assertExists()
+        compose.onNodeWithContentDescription("Codex").assertExists()
+        for (label in listOf("Automatic", "Built-in assistant", "自动", "内置助手")) {
+            compose.onNodeWithText(label).assertDoesNotExist()
+        }
         compose.onNodeWithText(name).activate()
         if (base != null) {
             val fields = compose.onAllNodes(hasSetTextAction())

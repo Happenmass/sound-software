@@ -52,11 +52,12 @@ python3 tools/deploy-speaker-npu-models.py --serial SERIAL --package dev.soundso
 
 Qwen3-ASR calls QAIRT 2.50 directly from an isolated worker process. The optional speaker accelerator uses the same SDK in a separate worker.
 
-The public APK includes the on-device Pi assistant runtime. Install Node.js 22.19 or newer, Python 3.11 or newer, and Android NDK 28.2.13676358.
+The signed phone release bundles Pi and Codex. Install Node.js 22.19 or newer, Python 3.11 or newer, zstd, and Android NDK 28.2.13676358. See the [phone release guide](PHONE_RELEASE_BUILD.md) for the pinned Codex archive and signing steps.
 
 ```sh
 bash tools/setup-dependencies.sh
 ./gradlew :app:assembleRelease -PincludeQwenHtp=true -PincludeSpeakerNpu=true -PincludeAsrWeights=true -PincludePi=true \
+  -PcodexArchive=/absolute/path/to/codex-aarch64-unknown-linux-musl.zst \
   -Dorg.gradle.jvmargs="-Xmx5g -Dfile.encoding=UTF-8"
 ```
 

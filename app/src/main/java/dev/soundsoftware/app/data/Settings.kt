@@ -17,6 +17,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonObject
 
 @Serializable data class BoundDevice(val address: String, val name: String, val serial: String? = null, val white: Boolean = true, val firmwareBound: Boolean = false)
 
@@ -25,7 +30,7 @@ import kotlinx.serialization.json.Json
 @Serializable data class LlmSettings(val baseUrl: String = "", val model: String = "", val repairTranscript: Boolean = false)
 
 @Serializable
-enum class AssistantBackend { PI, CODEX, BUILT_IN }
+enum class AssistantBackend { PI, CODEX }
 
 @Serializable
 data class AssistantModelSettings(val baseUrl: String = "", val model: String = "") {
@@ -46,7 +51,7 @@ data class AppSettings(
     val findMyEnabled: Boolean? = null,
     val recentSpeakerNames: List<String> = emptyList(),
     val autoSync: Boolean = true,
-    val assistantBackend: AssistantBackend? = null,
+    val assistantBackend: AssistantBackend = AssistantBackend.PI,
     val codex: AssistantModelSettings = AssistantModelSettings(),
     val pi: AssistantModelSettings = AssistantModelSettings(),
 )
@@ -64,8 +69,16 @@ class SettingsStore(private val context: Context, preferencePrefix: String = "")
     val secrets = SecretStore(context, preferencePrefix)
 
     private fun load(): AppSettings {
-        val saved = prefs.getString("settings", null)?.let { runCatching { json.decodeFromString<AppSettings>(it) }.getOrNull() }
-            ?: return AppSettings()
+        val stored = prefs.getString("settings", null) ?: return AppSettings()
+        val saved = runCatching {
+            val fields = json.parseToJsonElement(stored).jsonObject
+            val backend = fields["assistantBackend"]
+            // Map the previous Automatic and Built-in choices to the Pi default.
+            val migrated = if (backend == JsonNull || backend == JsonPrimitive("BUILT_IN")) {
+                JsonObject(fields - "assistantBackend")
+            } else fields
+            json.decodeFromJsonElement<AppSettings>(migrated)
+        }.getOrElse { return AppSettings() }
         return saved.copy(defaults = saved.defaults.withCurrentAsrProfile())
     }
 

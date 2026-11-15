@@ -94,8 +94,8 @@ android {
         buildConfigField("boolean", "CODEX_ENABLED", (codexArchive != null).toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
         buildConfigField("boolean", "SPEAKER_WEIGHTS_BUNDLED", includeSpeakerWeights.toString())
-        versionCode = 13
-        versionName = "0.1.11"
+        versionCode = 14
+        versionName = "0.1.12"
         testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }

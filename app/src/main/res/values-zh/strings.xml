@@ -558,10 +558,7 @@
   <string name="assistant_open_all">去全库助手提问</string>
     <string name="assistant_backend">AI 助手后端</string>
     <string name="assistant_backend_unavailable">此后端需要支持 Landlock 的手机和包含该后端的安装包。</string>
-    <string name="assistant_built_in">内置助手</string>
-    <string name="assistant_default">自动</string>
     <string name="assistant_url_required">请输入不含凭证、查询参数或片段的 HTTPS Base URL。</string>
     <string name="assistant_pi_model_help">Pi 使用 Chat Completions 接口。Base URL 留空时沿用纪要服务的模型和 API Key。</string>
     <string name="assistant_codex_model_help">Codex 使用 Responses API。请填写接口的 Base URL、模型和 API Key。</string>
-    <string name="assistant_node_requires_backend">运行 Node 脚本需要在 AI 助手后端中选择 Pi 或 Codex。</string>
 </resources>

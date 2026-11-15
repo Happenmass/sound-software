@@ -187,12 +187,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val source = when (config.assistantBackend) {
             AssistantBackend.CODEX -> config.codex
             AssistantBackend.PI -> config.pi.takeIf { it.baseUrl.isNotBlank() }
-            else -> null
         }
         return source?.let { it.baseUrl.isNotBlank() && it.model.isNotBlank() } ?: llmReady()
     }
 
-    fun saveAssistant(backend: AssistantBackend?, pi: AssistantModelSettings, codex: AssistantModelSettings,
+    fun saveAssistant(backend: AssistantBackend, pi: AssistantModelSettings, codex: AssistantModelSettings,
         piKey: String, codexKey: String) = runCatching {
         fun validate(profile: AssistantModelSettings): AssistantModelSettings {
             val urlText = profile.baseUrl.trim()

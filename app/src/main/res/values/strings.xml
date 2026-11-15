@@ -558,10 +558,7 @@
   <string name="assistant_open_all">Open all-recordings assistant</string>
     <string name="assistant_backend">Assistant backend</string>
     <string name="assistant_backend_unavailable">This assistant backend requires a compatible phone and a build that includes it.</string>
-    <string name="assistant_built_in">Built-in assistant</string>
-    <string name="assistant_default">Automatic</string>
     <string name="assistant_url_required">Enter an HTTPS base URL without credentials, query parameters, or fragments.</string>
     <string name="assistant_pi_model_help">Pi uses a Chat Completions endpoint. Leave Base URL blank to use the model and key from Notes service.</string>
     <string name="assistant_codex_model_help">Codex uses a Responses API endpoint. Enter its base URL, model, and API key.</string>
-    <string name="assistant_node_requires_backend">Select Pi or Codex in Assistant backend to run Node.</string>
 </resources>
