@@ -83,7 +83,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun title(r: Recording) = app.displayTitle(r)
     fun qwenHtpUnavailableReason() = app.processor.qwenHtpUnavailableReason()
-    fun qnnUnavailableReason() = app.processor.qnnUnavailableReason()
     fun localAsrProfiles() = app.processor.localAsrProfiles()
     fun modelReady(profileId: String) = app.processor.modelReady(profileId)
     fun llmReady() = app.processor.llmReady()
@@ -173,6 +172,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (key != null) app.settings.secrets.put(Processor.KEY_ASR, key.trim())
     }.onFailure { say(it.message) }.isSuccess
     fun saveLlm(llm: LlmSettings, key: String?) = runCatching {
+        require(!llm.repairTranscript || (llm.baseUrl.isNotBlank() && llm.model.isNotBlank())) {
+            app.getString(R.string.repair_transcript_needs_service)
+        }
         if (llm.baseUrl.isNotBlank()) {
             val url = llm.baseUrl.trim().toHttpUrl(); require(url.isHttps || Processor.debugLoopback(url)) { app.getString(R.string.llm_https_required) }
             require(llm.model.isNotBlank()) { app.getString(R.string.enter_model_name) }
@@ -185,12 +187,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val source = when (config.assistantBackend) {
             AssistantBackend.CODEX -> config.codex
             AssistantBackend.PI -> config.pi.takeIf { it.baseUrl.isNotBlank() }
-            else -> null
         }
         return source?.let { it.baseUrl.isNotBlank() && it.model.isNotBlank() } ?: llmReady()
     }
 
-    fun saveAssistant(backend: AssistantBackend?, pi: AssistantModelSettings, codex: AssistantModelSettings,
+    fun saveAssistant(backend: AssistantBackend, pi: AssistantModelSettings, codex: AssistantModelSettings,
         piKey: String, codexKey: String) = runCatching {
         fun validate(profile: AssistantModelSettings): AssistantModelSettings {
             val urlText = profile.baseUrl.trim()

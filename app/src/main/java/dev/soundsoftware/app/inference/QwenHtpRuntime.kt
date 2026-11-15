@@ -22,15 +22,16 @@ class QwenHtpFiles(context: Context, modelRoot: File) {
     private val app = context.applicationContext
     private val nativeDir = File(app.applicationInfo.nativeLibraryDir)
     val executable = File(nativeDir, "libsound_qwen_htp_worker.so")
-    val runtimeDir = File(app.codeCacheDir, "qwen-htp-2.51.0-v1")
+    val runtimeDir = File(app.codeCacheDir, "qwen-htp-2.50.0-v2")
     private val externalModels = File(modelRoot, "qwen-htp-sm8850")
-    private val bundled = BundledAsrModel(app, externalModels)
+    private val bundled = BundledModel(app, externalModels, "asr-models", BuildConfig.ASR_WEIGHTS_BUNDLED,
+        R.string.asr_model_storage_low, R.string.asr_model_unpack_failed)
     val modelDir get() = bundled.directory
     private val manifest by lazy {
         JSONObject(app.assets.open("qwen-htp-manifest.json").bufferedReader().use { it.readText() })
     }
 
-    fun supported(device: QnnDevice = QnnFiles.device()): Boolean =
+    fun supported(device: QnnDevice = QnnDevice.current()): Boolean =
         BuildConfig.QWEN_HTP_ENABLED && executable.canExecute() && device.supportsSm8850Htp
 
     fun unavailable(): String? {
@@ -92,9 +93,9 @@ class QwenHtpRuntime(
         AndroidQnnWorkerConnection(command, env, label = "Qwen HTP")
     },
 ) : LocalAsrRuntime {
-    override val modelId = "Qwen3-ASR-0.6B-OnSpeak47-v2.2.0-npu-SM8850"
-    override val runtimeName = "onnxruntime-1.29.0:qnn-2.51.0"
-    override val maxSamples = 8 * 16000
+    override val modelId = "Qwen3-ASR-0.6B-24s-W8-GQA-SM8850"
+    override val runtimeName = "qnn-2.50.0"
+    override val maxSamples = 24 * 16000
     override val backend get() = if (executed) "qnn-htp" else "qnn-htp-not-executed"
 
     private val execution = Mutex()
@@ -147,6 +148,8 @@ class QwenHtpRuntime(
             mapOf(
                 "LD_LIBRARY_PATH" to "$runtime:/system/lib64:/system_ext/lib64:/vendor/lib64",
                 "ADSP_LIBRARY_PATH" to runtime,
+                "QWEN_HTP_SHARED_IO" to "1",
+                "QWEN_HTP_PERFORMANCE" to "1",
             ),
         )
         worker = connection

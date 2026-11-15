@@ -49,25 +49,25 @@ class SoundApplication : Application() {
     internal lateinit var autoSyncRequested: StateFlow<Boolean>; private set
     internal var workServiceActive = false
     internal var instrumentationDataDir: File? = null
+    internal var instrumentationIsolateSettings = false
+    internal var instrumentationAssistantClient: okhttp3.OkHttpClient? = null
     val modelDir: File get() = File(getExternalFilesDir(null), "models")
 
     override fun onCreate() {
         super.onCreate()
-        val process = if (Build.VERSION.SDK_INT >= 28) getProcessName()
-            else File("/proc/self/cmdline").inputStream().buffered().use { input ->
-                buildString { var byte = input.read(); while (byte > 0) { append(byte.toChar()); byte = input.read() } }
-            }
-        if (process == "$packageName:pi") return
         // App-owned model folders, so files later pushed by adb or a model installer stay readable.
         File(modelDir, "diarization").mkdirs()
-        settings = SettingsStore(this)
-        val dataDir = if (BuildConfig.DEBUG) instrumentationDataDir ?: filesDir else filesDir
+        val fixture = instrumentationDataDir
+        val dataDir = fixture ?: filesDir
+        val preferences = if (instrumentationIsolateSettings) fixture?.name?.plus("-").orEmpty() else ""
+        settings = SettingsStore(this, preferences)
         recordingIndex = dev.soundsoftware.app.agent.RecordingIndex(File(dataDir, "recordings.db"))
         repository = RecordingRepository(dataDir, recordingIndex)
         assistant = dev.soundsoftware.app.agent.AgentController(recordingIndex, settings, scope,
-            dev.soundsoftware.app.agent.AgentSandbox(this))
+            dev.soundsoftware.app.agent.AgentSandbox(this, dataDir),
+            instrumentationAssistantClient ?: okhttp3.OkHttpClient())
         playback = Playback(scope)
-        processor = Processor(repository, settings, modelDir, File(filesDir, "checkpoints"), scope, qnnFiles=dev.soundsoftware.app.inference.QnnFiles.from(this,modelDir), diarizer=dev.soundsoftware.app.inference.SherpaDiarizer.forDevice(this,File(modelDir,"diarization")), qwenHtpFiles = dev.soundsoftware.app.inference.QwenHtpFiles(this, modelDir), notify = ::notifyDone)
+        processor = Processor(repository, settings, modelDir, File(filesDir, "checkpoints"), scope, diarizer=dev.soundsoftware.app.inference.SherpaDiarizer.forDevice(this,File(modelDir,"diarization")), qwenHtpFiles = dev.soundsoftware.app.inference.QwenHtpFiles(this, modelDir), notify = ::notifyDone)
         devices = DeviceManager(DeviceLinkFactory.create(this), settings, repository, scope) { id ->
             val prefs = settings.state.value
             if (prefs.autoTranscribe && processor.modelReady(prefs.defaults.profileId)) {

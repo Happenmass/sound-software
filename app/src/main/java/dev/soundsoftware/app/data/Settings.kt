@@ -17,6 +17,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonObject
 
 @Serializable data class BoundDevice(val address: String, val name: String, val serial: String? = null, val white: Boolean = true, val firmwareBound: Boolean = false)
 
@@ -25,7 +30,7 @@ import kotlinx.serialization.json.Json
 @Serializable data class LlmSettings(val baseUrl: String = "", val model: String = "", val repairTranscript: Boolean = false)
 
 @Serializable
-enum class AssistantBackend { PI, CODEX, BUILT_IN }
+enum class AssistantBackend { PI, CODEX }
 
 @Serializable
 data class AssistantModelSettings(val baseUrl: String = "", val model: String = "") {
@@ -46,26 +51,34 @@ data class AppSettings(
     val findMyEnabled: Boolean? = null,
     val recentSpeakerNames: List<String> = emptyList(),
     val autoSync: Boolean = true,
-    val assistantBackend: AssistantBackend? = null,
+    val assistantBackend: AssistantBackend = AssistantBackend.PI,
     val codex: AssistantModelSettings = AssistantModelSettings(),
     val pi: AssistantModelSettings = AssistantModelSettings(),
 )
 
 /** Non-secret preferences as one JSON document; API keys go through [SecretStore]. */
-class SettingsStore(private val context: Context) {
+class SettingsStore(private val context: Context, preferencePrefix: String = "") {
     fun text(@androidx.annotation.StringRes id: Int, vararg args: Any?): String =
         if (args.isEmpty()) context.getString(id) else context.getString(id, *args)
 
     fun outputLanguage(): String = if (context.resources.configuration.locales[0].language == "zh") "zh" else "en"
-    private val prefs = context.getSharedPreferences("app-settings", 0)
+    private val prefs = context.getSharedPreferences(preferencePrefix + "app-settings", 0)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutable = MutableStateFlow(load())
     val state = mutable.asStateFlow()
-    val secrets = SecretStore(context)
+    val secrets = SecretStore(context, preferencePrefix)
 
     private fun load(): AppSettings {
-        val saved = prefs.getString("settings", null)?.let { runCatching { json.decodeFromString<AppSettings>(it) }.getOrNull() }
-            ?: return AppSettings()
+        val stored = prefs.getString("settings", null) ?: return AppSettings()
+        val saved = runCatching {
+            val fields = json.parseToJsonElement(stored).jsonObject
+            val backend = fields["assistantBackend"]
+            // Map the previous Automatic and Built-in choices to the Pi default.
+            val migrated = if (backend == JsonNull || backend == JsonPrimitive("BUILT_IN")) {
+                JsonObject(fields - "assistantBackend")
+            } else fields
+            json.decodeFromJsonElement<AppSettings>(migrated)
+        }.getOrElse { return AppSettings() }
         return saved.copy(defaults = saved.defaults.withCurrentAsrProfile())
     }
 
@@ -76,8 +89,8 @@ class SettingsStore(private val context: Context) {
 }
 
 /** AES-GCM with a non-exportable Android Keystore key. Values never enter logs or exports. */
-class SecretStore(context: Context) {
-    private val prefs = context.getSharedPreferences("secrets", 0)
+class SecretStore @JvmOverloads constructor(context: Context, preferencePrefix: String = "") {
+    private val prefs = context.getSharedPreferences(preferencePrefix + "secrets", 0)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }

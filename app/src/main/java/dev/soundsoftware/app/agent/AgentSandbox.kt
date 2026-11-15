@@ -18,7 +18,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 /** One persistent data workspace per recording scope, with a fresh working directory per turn. */
-class AgentSandbox(private val context: Context) {
+class AgentSandbox(private val context: Context, private val dataDir: File = context.filesDir) {
     private val native = File(context.applicationInfo.nativeLibraryDir)
     private val launcher = File(native, "libsound_agent_sandbox.so")
     internal val node = File(native, "libsound_agent_node.so").absolutePath
@@ -31,7 +31,7 @@ class AgentSandbox(private val context: Context) {
     }
 
     internal fun workspaceFor(recordingId: String?): File {
-        val root = File(context.filesDir, "agent-workspaces")
+        val root = File(dataDir, "agent-workspaces")
         if (recordingId == null) return File(root, "global")
         val digest = MessageDigest.getInstance("SHA-256").digest(recordingId.toByteArray(Charsets.UTF_8))
         val directory = digest.joinToString("") { "%02x".format(Locale.ROOT, it) }

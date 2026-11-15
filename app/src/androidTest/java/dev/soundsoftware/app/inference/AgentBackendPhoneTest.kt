@@ -37,13 +37,15 @@ class AgentBackendPhoneTest {
 
     private val activity get() = compose.activity
     private val app get() = activity.application as SoundApplication
-    private val sandbox get() = AgentSandbox(app)
+    private val sandbox get() = AgentSandbox(app, app.instrumentationDataDir ?: app.filesDir)
 
     private fun SemanticsNodeInteraction.activate() = performSemanticsAction(SemanticsActions.OnClick) { it() }
 
     private fun requirePhoneProbe() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("agentPhone") == "true")
-        check(app.packageName.endsWith(".agentpoc")) { "Run this test with the side-by-side build." }
+        check(app.packageName.endsWith(".agentpoc") || app.packageName.endsWith(".release") && app.instrumentationDataDir != null) {
+            "Use a side-by-side build or an isolated release fixture."
+        }
         assertTrue("The phone did not support the installed sandbox launcher", sandbox.supported)
     }
 
@@ -299,7 +301,7 @@ class AgentBackendPhoneTest {
         val base = requireNotNull(args.getString("liveBase")) { "Provide a real model gateway." }
         val model = requireNotNull(args.getString("liveModelName"))
         val keyFile = File(app.cacheDir, "agent-live-key")
-        val key = keyFile.takeIf { it.isFile }?.let { it.readText().trim().also { _ -> it.delete() } }.orEmpty()
+        val key = keyFile.takeIf { it.isFile }?.let { it.readText().trim().also { _ -> it.delete() } } ?: args.getString("liveKey").orEmpty()
         val previous = app.settings.state.value
         val keys = listOf(AssistantModelSettings.PI_KEY, AssistantModelSettings.CODEX_KEY)
         val previousKeys = keys.associateWith(app.settings.secrets::get)
@@ -366,6 +368,11 @@ class AgentBackendPhoneTest {
     private fun configure(name: String, base: String? = null, model: String = "", key: String = "") {
         compose.onNodeWithContentDescription(activity.getString(R.string.settings)).activate()
         compose.onNodeWithText(activity.getString(R.string.assistant_backend)).performScrollTo().activate()
+        compose.onNodeWithContentDescription("Pi").assertExists()
+        compose.onNodeWithContentDescription("Codex").assertExists()
+        for (label in listOf("Automatic", "Built-in assistant", "自动", "内置助手")) {
+            compose.onNodeWithText(label).assertDoesNotExist()
+        }
         compose.onNodeWithText(name).activate()
         if (base != null) {
             val fields = compose.onAllNodes(hasSetTextAction())

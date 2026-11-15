@@ -4,10 +4,14 @@ Magic V6 日常使用的安装包沿用公开版 `dev.soundsoftware.app.release`
 
 ```sh
 ./gradlew :app:assembleRelease -PincludeQwenHtp=true -PincludeSpeakerNpu=true \
-  -PincludeAsrWeights=true -PincludePi=true -Dorg.gradle.jvmargs="-Xmx5g -Dfile.encoding=UTF-8"
+  -PincludeAsrWeights=true -PincludePi=true \
+  -PcodexArchive=/absolute/path/to/codex-aarch64-unknown-linux-musl.zst \
+  -Dorg.gradle.jvmargs="-Xmx5g -Dfile.encoding=UTF-8"
 
 bash tools/sign-phone-release.sh app/build/outputs/apk/release/app-release-unsigned.apk /tmp/SoundSoftware-phone.apk
 adb -s SERIAL install -r /tmp/SoundSoftware-phone.apk
 ```
 
 签名脚本从本机 Keychain 读取现有发布密钥的密码，检查 APK 包名、签名证书和对齐。模型和运行库按[模型配置](MODELS.md)准备。自动化和调试仍可使用独立 debug 包。安装到常用手机时使用签名后的 release 包，录音库与 GitHub 公开版共用同一份应用数据。
+
+双后端正式包从架构稿 §6 所列的 ARM64 发布包引入 Codex。正式包验收使用 `-PandroidTestBuildType=release :app:assembleReleaseAndroidTest` 编译辅助 APK。签名匹配的辅助包可为模型测试创建隔离的录音库和设置，测试结束后卸载辅助包。

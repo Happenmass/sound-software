@@ -68,7 +68,7 @@ class MeetingAnalyzer(
     private data class Answer(val raw: JsonObject, val found: Boolean, val text: String, val refs: List<EvidenceRef>)
 
     suspend fun repairTranscript(fragments: List<String>): String {
-        require(fragments.size > 1 && fragments.none { it.isBlank() })
+        require(fragments.isNotEmpty() && fragments.none { it.isBlank() })
         val input = buildJsonObject { put("fragments", buildJsonArray { fragments.forEach { add(it) } }) }
         val result = parseObject(chat(MeetingPrompts.REPAIR_TRANSCRIPT, input, localizeOutput = false))
         result.only("text")

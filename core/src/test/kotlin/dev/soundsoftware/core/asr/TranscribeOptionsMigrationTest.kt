@@ -15,12 +15,10 @@ class TranscribeOptionsMigrationTest {
             speakerCount = 2,
             hotwords = listOf("test term"),
         )
-        assertEquals(saved.copy(profileId = "qwen-htp"), saved.withCurrentAsrProfile())
-        assertEquals(
-            saved.copy(profileId = "sensevoice-qnn"),
-            saved.copy(profileId = "sensevoice-cpu").withCurrentAsrProfile(),
-        )
-        for (profile in listOf("qwen-htp", "sensevoice-qnn", "http-api")) {
+        for (legacy in listOf("qwen-cpu", "sensevoice-cpu", "sensevoice-qnn")) {
+            assertEquals(saved.copy(profileId = "qwen-htp"), saved.copy(profileId = legacy).withCurrentAsrProfile())
+        }
+        for (profile in listOf("qwen-htp", "http-api")) {
             val current = saved.copy(profileId = profile)
             assertEquals(current, current.withCurrentAsrProfile())
         }

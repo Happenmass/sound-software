@@ -39,17 +39,16 @@ class AsrModelsUiTest {
             assertEquals(models.size - installed, compose.onAllNodesWithText(label(R.string.not_installed)).fetchSemanticsNodes().size)
         }
         compose.onNodeWithText("Qwen3-ASR 0.6B").assertDoesNotExist()
+        compose.onNodeWithText("SenseVoice", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Magic V6", substring = true).assertDoesNotExist()
         compose.onNodeWithText(app.modelDir.absolutePath, substring = true).assertDoesNotExist()
         compose.onNode(hasText(label(R.string.default_transcription_settings)) and hasClickAction()).performScrollTo().performClick()
         // The section label and the row can both be present. The row has the click action.
         compose.onNode(hasText(label(R.string.transcription_service)) and hasClickAction()).performScrollTo().performClick()
         val settingsRow = hasText(label(R.string.transcription_service)) and hasClickAction()
-        for (title in listOf(R.string.asr_qwen_htp, R.string.asr_npu)) {
-            val name = label(title)
-            val option = compose.onNode(hasText(name) and hasClickAction() and !settingsRow)
-            if (name in expected) option.assertExists() else option.assertDoesNotExist()
-        }
+        val qwen = compose.onNode(hasText(label(R.string.asr_qwen_htp)) and hasClickAction() and !settingsRow)
+        if (expected.isEmpty()) qwen.assertDoesNotExist() else qwen.assertExists()
+        compose.onNodeWithText("SenseVoice", substring = true).assertDoesNotExist()
         compose.onNodeWithText(label(R.string.asr_http)).assertIsDisplayed()
     }
 }

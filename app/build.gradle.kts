@@ -4,9 +4,8 @@ plugins {
     kotlin("plugin.compose")
     kotlin("plugin.serialization")
 }
-val includeQnn = providers.gradleProperty("includeQnn").getOrElse("false").toBoolean()
-val includeSpeakerWorker = providers.gradleProperty("includeSpeakerWorker").getOrElse(includeQnn.toString()).toBoolean()
-val includeSpeakerNpu = providers.gradleProperty("includeSpeakerNpu").getOrElse((includeQnn && includeSpeakerWorker).toString()).toBoolean()
+val includeSpeakerWorker = providers.gradleProperty("includeSpeakerWorker").getOrElse("false").toBoolean()
+val includeSpeakerNpu = providers.gradleProperty("includeSpeakerNpu").getOrElse("false").toBoolean()
 val includeQwenHtp = providers.gradleProperty("includeQwenHtp").getOrElse("false").toBoolean()
 val includePi = providers.gradleProperty("includePi").getOrElse("false").toBoolean()
 val codexArchive = providers.gradleProperty("codexArchive").orNull?.let(rootProject::file)
@@ -25,18 +24,35 @@ val preparePi by tasks.registering(Exec::class) {
     codexArchive?.let { args("--codex", it) }
 }
 val includeAsrWeights = providers.gradleProperty("includeAsrWeights").getOrElse("false").toBoolean()
+val includeSpeakerWeights = providers.gradleProperty("includeSpeakerWeights").getOrElse(includeAsrWeights.toString()).toBoolean()
+val prepareSpeakerWeights by tasks.registering(Exec::class) {
+    val output = layout.buildDirectory.dir("generated/bundledSpeakerAssets")
+    val cache = file(System.getProperty("user.home") + "/.cache/codex/models")
+    inputs.files(rootProject.file("tools/prepare-bundled-speaker.py"),
+        rootProject.file("tools/speaker-npu-runtime-lock.json"))
+    inputs.dir(rootProject.file("tools/diarization-worker/model-notices"))
+    inputs.files(cache.resolve("sherpa-onnx/sherpa-onnx-pyannote-segmentation-3-0/model.onnx"),
+        cache.resolve("sherpa-onnx/3dspeaker_eres2netv2_zh.onnx"))
+    if (includeSpeakerNpu) inputs.files(cache.resolve("qualcomm/speaker-eres2netv2-qnn250/eres2netv2-masked.bin"),
+        cache.resolve("qualcomm/speaker-eres2netv2-qnn250/embedding-head.onnx"))
+    inputs.property("includeHtp", includeSpeakerNpu)
+    outputs.dir(output)
+    val args = listOf("python3", rootProject.file("tools/prepare-bundled-speaker.py").path,
+        "--output", output.get().asFile.path)
+    commandLine(if (includeSpeakerNpu) args + "--include-htp" else args)
+}
 val prepareAsrWeights by tasks.registering(Exec::class) {
     val output = layout.buildDirectory.dir("generated/bundledAsrAssets")
-    inputs.files(rootProject.file("tools/prepare-bundled-asr.py"), rootProject.file("tools/qwen-npu-worker/artifacts.json"),
-        rootProject.file("tools/model-validation/artifacts.json"))
+    inputs.files(rootProject.file("tools/prepare-bundled-asr.py"), rootProject.file("tools/qwen-npu-worker/qnn24/models.json"))
     outputs.dir(output)
     commandLine("python3", rootProject.file("tools/prepare-bundled-asr.py"), "--output", output.get().asFile)
 }
 val prepareQwenHtp by tasks.registering(Exec::class) {
-    val worker = rootProject.file("tools/qwen-npu-worker")
+    val worker = rootProject.file("tools/qwen-npu-worker/qnn24")
     val jni = layout.buildDirectory.dir("generated/qwenHtpJni")
     val assets = layout.buildDirectory.dir("generated/qwenHtpAssets")
-    inputs.files(worker.listFiles()?.filter { it.extension in setOf("cc", "h", "json", "py") }.orEmpty())
+    inputs.files(worker.listFiles()?.filter { it.extension in setOf("cc", "hpp", "json", "py") }.orEmpty())
+    inputs.files(rootProject.file("tools/speaker-npu-runtime-lock.json"), rootProject.file("tools/prepare-qnn-notices.py"))
     outputs.dirs(jni, assets)
     commandLine("python3", worker.resolve("build.py"), "--jni", jni.get().asFile, "--assets", assets.get().asFile)
 }
@@ -52,16 +68,6 @@ val prepareSpeakerNative by tasks.registering(Exec::class) {
     outputs.dir(layout.buildDirectory.dir("generated/speakerJni"))
     commandLine("python3",rootProject.file("tools/prepare-speaker-runtime.py"),"--output",layout.buildDirectory.dir("generated/speakerJni").get().asFile)
 }
-val prepareSpeakerProbe by tasks.registering(Exec::class) {
-    inputs.files(rootProject.file("tools/prepare-speaker-runtime.py"),rootProject.file("tools/speaker-runtime-lock.json"),rootProject.file("tools/diarization-worker/qnn-probe.cc"),rootProject.file("tools/model-validation/qnn_build.py"))
-    outputs.dir(layout.buildDirectory.dir("generated/speakerProbeJni"))
-    commandLine("python3",rootProject.file("tools/prepare-speaker-runtime.py"),"--probe","--output",layout.buildDirectory.dir("generated/speakerProbeJni").get().asFile)
-}
-val prepareQnnNative by tasks.registering(Exec::class) {
-    inputs.files(rootProject.file("tools/prepare-qnn-runtime.py"), rootProject.file("tools/qnn-runtime-lock.json"),rootProject.file("tools/qnn-worker/main.cc"))
-    outputs.dir(layout.buildDirectory.dir("generated/qnnJni"))
-    commandLine("python3",rootProject.file("tools/prepare-qnn-runtime.py"),"--output",layout.buildDirectory.dir("generated/qnnJni").get().asFile)
-}
 fun registerQnnNotices(taskName: String, sdk: String, cachePath: String, lockName: String) =
     tasks.register<Exec>(taskName) {
         val output = layout.buildDirectory.dir("generated/$taskName")
@@ -71,25 +77,25 @@ fun registerQnnNotices(taskName: String, sdk: String, cachePath: String, lockNam
         outputs.dir(output)
         commandLine("python3", rootProject.file("tools/prepare-qnn-notices.py"), "--sdk", sdk, "--output", output.get().asFile)
     }
-val prepareQnnNotices = registerQnnNotices("qnnNotices", "2.40", "2.40.0/notices", "qnn-runtime-lock.json")
 val prepareSpeakerNpuNotices = registerQnnNotices("speakerNpuNotices", "2.50",
     "2.50.0/sdk/qairt/2.50.0.260828", "speaker-npu-runtime-lock.json")
 android {
     namespace = "dev.soundsoftware.app"
     compileSdk = 35
+    testBuildType = providers.gradleProperty("androidTestBuildType").getOrElse("debug")
     defaultConfig {
         applicationId = "dev.soundsoftware.app"
         minSdk = 26
         targetSdk = 35
-        buildConfigField("boolean", "QNN_ENABLED", includeQnn.toString())
         buildConfigField("boolean", "SPEAKER_WORKER_ENABLED", includeSpeakerWorker.toString())
         buildConfigField("boolean", "SPEAKER_NPU_ENABLED", includeSpeakerNpu.toString())
         buildConfigField("boolean", "QWEN_HTP_ENABLED", includeQwenHtp.toString())
         buildConfigField("boolean", "PI_ENABLED", includePi.toString())
         buildConfigField("boolean", "CODEX_ENABLED", (codexArchive != null).toString())
         buildConfigField("boolean", "ASR_WEIGHTS_BUNDLED", includeAsrWeights.toString())
-        versionCode = 7
-        versionName = "0.1.5"
+        buildConfigField("boolean", "SPEAKER_WEIGHTS_BUNDLED", includeSpeakerWeights.toString())
+        versionCode = 14
+        versionName = "0.1.12"
         testInstrumentationRunner = "dev.soundsoftware.app.AssistantTestRunner"
         // Target devices are 64-bit ARM (Snapdragon 8 class); drops ~100 MB of unused native libraries.
         ndk { abiFilters += "arm64-v8a" }
@@ -115,9 +121,10 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = true
-        jniLibs.keepDebugSymbols += setOf("**/libsound_qnn_runner.so", "**/libsound_qwen_htp_worker.so", "**/libsound_speaker_npu_worker.so", "**/libQnn*.so")
+        jniLibs.keepDebugSymbols += setOf("**/libsound_qwen_htp_worker.so", "**/libsound_speaker_npu_worker.so", "**/libQnn*.so")
     }
     if (includeAsrWeights) sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/bundledAsrAssets"))
+    if (includeSpeakerWeights) sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/bundledSpeakerAssets"))
     if (includeQwenHtp) {
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qwenHtpJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenHtpAssets"))
@@ -128,16 +135,11 @@ android {
         packaging.jniLibs.keepDebugSymbols += "**/libsound_agent_codex.so"
         packaging.jniLibs.pickFirsts += "**/libc++_shared.so"
     }
-    if (includeQnn) sourceSets.getByName("androidTest").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerProbeJni"))
     if (includeSpeakerWorker) sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerJni"))
     if (includeSpeakerNpu) {
-        sourceSets.getByName("release").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuNotices"))
+        if (!includeQwenHtp) sourceSets.getByName("release").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuNotices"))
         sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/speakerNpuJni"))
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/speakerNpuAssets"))
-    }
-    if (includeQnn) {
-        sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/qnnJni"))
-        sourceSets.getByName("release").assets.srcDir(layout.buildDirectory.dir("generated/qnnNotices"))
     }
 }
 dependencies {
@@ -164,12 +166,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-if (includeQnn) {
-    tasks.named("preBuild").configure { dependsOn(prepareQnnNative, prepareQnnNotices) }
-}
-
 if (includeSpeakerWorker) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNative) }
-if (includeQnn) tasks.matching { it.name == "mergeDebugAndroidTestJniLibFolders" }.configureEach { dependsOn(prepareSpeakerProbe) }
 
 if (includeSpeakerNpu) tasks.named("preBuild").configure { dependsOn(prepareSpeakerNpu, prepareSpeakerNpuNotices) }
 
@@ -177,6 +174,8 @@ if (includeQwenHtp) tasks.named("preBuild").configure { dependsOn(prepareQwenHtp
 if (includeAgentSandbox) tasks.named("preBuild").configure { dependsOn(preparePi) }
 
 if (includeAsrWeights) {
-    require(includeQnn && includeQwenHtp) { "Bundled ASR weights require both NPU engines." }
+    require(includeQwenHtp) { "Bundled ASR weights require the Qwen NPU engine." }
     tasks.named("preBuild").configure { dependsOn(prepareAsrWeights) }
 }
+
+if (includeSpeakerWeights) tasks.named("preBuild").configure { dependsOn(prepareSpeakerWeights) }

@@ -53,6 +53,8 @@ class MeetingWorkflowTest {
             val input = json.parseToJsonElement(messages[1].jsonObject.getValue("content").jsonPrimitive.content).jsonObject
             assertEquals(setOf("fragments"), input.keys)
             assertEquals(fragments, input.getValue("fragments").jsonArray.map { it.jsonPrimitive.content })
+            server.enqueue(response(buildJsonObject { put("text", "我明天会发 Qwen 的报告。") }))
+            assertEquals("我明天会发 Qwen 的报告。", service.repairTranscript(listOf("我明天会发 Qwen 的报告")))
             server.enqueue(response(buildJsonObject { put("text", " ") }))
             assertTrue(runCatching { service.repairTranscript(fragments) }.exceptionOrNull() is AnalysisException)
         }

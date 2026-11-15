@@ -24,12 +24,10 @@ import dev.soundsoftware.app.Screen
 import dev.soundsoftware.app.processing.ASR_PROFILES
 import dev.soundsoftware.core.model.SceneTemplate
 
-private val languages = listOf("zh" to R.string.language_mandarin, "en" to R.string.language_english, "yue" to R.string.language_cantonese, "ja" to R.string.language_japanese, "ko" to R.string.language_korean)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SetupScreen(vm: AppViewModel, recordingId: String?) {
-    val languageLabels = languages.map { (code, label) -> code to stringResource(label) }
     val settings by vm.settings.collectAsState()
     val recordings by vm.recordings.collectAsState()
     val recording = recordingId?.let { id -> recordings.firstOrNull { it.id == id } }
@@ -72,9 +70,8 @@ fun SetupScreen(vm: AppViewModel, recordingId: String?) {
                 SectionLabel(stringResource(R.string.recognition))
                 Group {
                     SettingRow(stringResource(R.string.transcription_service), stringResource(profile.titleRes) + if (!ready) stringResource(R.string.not_ready_suffix) else "", chevron = true) { picker = "profile" }
-                    val sense = options.profileId == "sensevoice-qnn"
-                    SettingRow(stringResource(R.string.language), if (sense) languageLabels.firstOrNull { it.first == options.language }?.second ?: stringResource(R.string.detect_language) else stringResource(R.string.detect_language), chevron = sense,
-                        subtitle = if (options.profileId == "qwen-htp") stringResource(R.string.qwen_language_help) else null) { if (sense) picker = "language" }
+                    SettingRow(stringResource(R.string.language), stringResource(R.string.detect_language),
+                        subtitle = if (options.profileId == "qwen-htp") stringResource(R.string.qwen_language_help) else null)
                     SettingRow(stringResource(R.string.mixed_chinese_english), trailing = { WebCheckbox(options.mixedChineseEnglish, { options = options.copy(mixedChineseEnglish = it) }, label = stringResource(R.string.mixed_chinese_english)) }) {
                         options = options.copy(mixedChineseEnglish = !options.mixedChineseEnglish)
                     }
@@ -112,13 +109,8 @@ fun SetupScreen(vm: AppViewModel, recordingId: String?) {
                             drawRoundRect(C.Faint, cornerRadius = CornerRadius(16.dp.toPx()), style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx()))))
                         }.tap { adding = true }.padding(horizontal = 12.dp), Alignment.Center) { T(stringResource(R.string.add_hotword_chip), ts(14, 400, C.Blue)) }
                     }
-                    if (options.hotwords.isNotEmpty()) {
-                        val hint = when (options.profileId) {
-                            "sensevoice-qnn" -> R.string.sensevoice_hotwords_help
-                            "qwen-htp" -> R.string.qwen_htp_hotwords_help
-                            else -> null
-                        }
-                        if (hint != null) T(stringResource(hint), ts(12, 400, C.Muted), Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp))
+                    if (options.hotwords.isNotEmpty() && options.profileId == "qwen-htp") {
+                        T(stringResource(R.string.qwen_htp_hotwords_help), ts(12, 400, C.Muted), Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp))
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -139,11 +131,7 @@ fun SetupScreen(vm: AppViewModel, recordingId: String?) {
                     val profiles = vm.localAsrProfiles() + ASR_PROFILES.filterNot { it.local }
                     profiles.forEachIndexed { i, p ->
                         val ok = vm.modelReady(p.id)
-                        val unavailable = when (p.id) {
-                            "sensevoice-qnn" -> vm.qnnUnavailableReason()
-                            "qwen-htp" -> vm.qwenHtpUnavailableReason()
-                            else -> null
-                        }
+                        val unavailable = if (p.local) vm.qwenHtpUnavailableReason() else null
                         SettingRow(stringResource(p.titleRes), if (ok) null else stringResource(R.string.not_ready), subtitle = unavailable ?: stringResource(p.subtitleRes), divider = i < profiles.lastIndex, inset = 0.dp,
                             trailing = { if (p.id == options.profileId) Ico(Icons.Check, 18.dp, C.Blue) }) {
                             if (!ok && p.id == "http-api") { picker = null; vm.push(Screen.AsrService) }
@@ -152,16 +140,7 @@ fun SetupScreen(vm: AppViewModel, recordingId: String?) {
                     }
                 }
             }
-            "language" -> Sheet({ picker = null }) {
-                T(stringResource(R.string.language), ts(18, 700))
-                Column {
-                    (listOf<Pair<String?, String>>(null to stringResource(R.string.detect_language)) + languageLabels).forEach { (code, label) ->
-                        SettingRow(label, inset = 0.dp, trailing = { if (options.language == code) Ico(Icons.Check, 18.dp, C.Blue) }) {
-                            options = options.copy(language = code, mixedChineseEnglish = if (code == null) true else options.mixedChineseEnglish); picker = null
-                        }
-                    }
-                }
-            }
+
         }
         if (adding) {
             var word by remember { mutableStateOf("") }

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build a separate experimental HTP worker, retaining the stable CPU build and binary."""
-import hashlib,os,shutil,subprocess,tarfile
+import hashlib,os,runpy,shutil,subprocess,tarfile
 from pathlib import Path
 repo=Path(__file__).resolve().parents[2];cache=Path.home()/'.cache/codex'
-root=cache/'speaker-npu-worker';root.mkdir(exist_ok=True);source=root/'sherpa-onnx-2.0.1'
+root=cache/'speaker-npu-hybrid-worker';root.mkdir(exist_ok=True);source=root/'sherpa-onnx-2.0.1'
 archive=cache/'qnn-validation/sherpa-onnx-v2.0.1.tar.gz'
 assert hashlib.sha256(archive.read_bytes()).hexdigest()=='24ecc0fccf6344c2556e7c229c849e9f61bf9456b915615197d85f35e3f177e7'
 if not (source/'.sound-source-complete').is_file():
@@ -17,13 +17,13 @@ for filename in ['offline-speaker-diarization-pyannote-impl.h','sound-diar-paral
 shutil.copyfile(repo/'tools/diarization-worker/npu-embedding.h',csrc/'qnn/sound-npu-embedding.h')
 with tarfile.open(archive) as t:s=t.extractfile('sherpa-onnx-2.0.1/sherpa-onnx/csrc/speaker-embedding-extractor-model.cc').read().decode()
 s=s.replace('namespace sherpa_onnx {','#include "sherpa-onnx/csrc/qnn/sound-npu-embedding.h"\n\nnamespace sherpa_onnx {',1)
-anchor='  Ort::Value Compute(Ort::Value x) const {\n';assert s.count(anchor)==1
-s=s.replace(anchor,anchor+'    if(std::getenv("SOUND_SPEAKER_NPU_MODELS")) {\n      auto accelerated=SoundSpeakerNpu().Compute(x);\n      if(std::getenv("SOUND_SPEAKER_NPU_VALIDATE")) {\n        auto reference=sess_->Run({},input_names_ptr_.data(),&x,1,output_names_ptr_.data(),output_names_ptr_.size());\n        SoundSpeakerNpu().Validate(reference[0],accelerated);\n      }\n      return accelerated;\n    }\n');(csrc/'speaker-embedding-extractor-model.cc').write_text(s)
-main=(repo/'tools/diarization-worker/main.cc').read_text().replace('cpu-parallel','qnn-htp-hybrid')
-main=main.replace('#include "sherpa-onnx/csrc/wave-reader.h"','#include "sherpa-onnx/csrc/wave-reader.h"\n#include "sherpa-onnx/csrc/qnn/sound-npu-embedding.h"')
-main=main.replace('  ++sequence;std::cout','  sherpa_onnx::SoundSpeakerNpu().PrintStats();\n  ++sequence;std::cout')
-main=main.replace('}}catch(...){return 5;}', '}}catch(const std::exception& e){std::cerr<<\"SOUND_NPU_ERROR \"<<e.what()<<std::endl;return 5;}')
-(csrc/'sound-speaker-npu-worker.cc').write_text(main)
+(csrc/'speaker-embedding-extractor-model.cc').write_text(s)
+for filename in ('speaker-embedding-extractor.h','speaker-embedding-extractor.cc','speaker-embedding-extractor-impl.h',
+                 'speaker-embedding-extractor-general-impl.h','speaker-embedding-extractor-model.h'):
+ with tarfile.open(archive) as t:
+  (csrc/filename).write_bytes(t.extractfile('sherpa-onnx-2.0.1/sherpa-onnx/csrc/'+filename).read())
+runpy.run_path(str(repo/'tools/diarization-worker/batch4-build-patches.py'))['patch_batch_sources'](csrc)
+shutil.copyfile(repo/'tools/diarization-worker/npu-main.cc',csrc/'sound-speaker-npu-worker.cc')
 cm=csrc/'CMakeLists.txt';add='add_executable(sound-speaker-npu-worker sound-speaker-npu-worker.cc)\ntarget_link_libraries(sound-speaker-npu-worker sherpa-onnx-core)\ntarget_include_directories(sound-speaker-npu-worker PRIVATE "$ENV{QNN_SDK_ROOT}/include/QNN" "$ENV{SHERPA_ONNXRUNTIME_INCLUDE_DIR}")\n'
 with tarfile.open(archive) as t:base=t.extractfile('sherpa-onnx-2.0.1/sherpa-onnx/csrc/CMakeLists.txt').read().decode()
 cm.write_text(base+'\n'+add)
@@ -34,5 +34,5 @@ for p in (cache/'qnn-validation/build-arm64/_deps').glob('*-src'):options['FETCH
 for command,name in [([str(cmake),'-S',str(source),'-B',str(build),'-G','Ninja']+[f'-D{k}={v}' for k,v in options.items()],'configure.log'),([str(cmake),'--build',str(build),'--target','sound-speaker-npu-worker','-j','6'],'build.log')]:
  print(name,flush=True)
  with (root/name).open('w') as log:subprocess.run(command,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
-out=root/'staged/sound-speaker-npu-worker';out.parent.mkdir(exist_ok=True);shutil.copyfile(build/'bin/sound-speaker-npu-worker',out)
+out=cache/'speaker-npu-shared-batch1-worker/staged/sound-speaker-npu-worker';out.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(build/'bin/sound-speaker-npu-worker',out)
 subprocess.run([str(ndk/'toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip'),str(out)],check=True);print(out,flush=True)

@@ -21,7 +21,10 @@ import okio.source
 internal class CodexModelRelay(
     private val base: HttpUrl,
     private val key: String?,
+    upstream: OkHttpClient = OkHttpClient(),
 ) : Closeable {
+    private val client = upstream.newBuilder().followRedirects(false).followSslRedirects(false)
+        .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS).build()
     private val token = UUID.randomUUID().toString()
     private val server = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1"))
     private val sockets = ConcurrentHashMap.newKeySet<Socket>()
@@ -116,8 +119,5 @@ internal class CodexModelRelay(
         sockets.forEach { runCatching { it.close() } }
     }
 
-    private companion object {
-        val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
-            .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS).build()
-    }
+
 }

@@ -11,7 +11,8 @@ import kotlinx.serialization.json.*
 import okhttp3.HttpUrl
 
 /** A Codex thread lives in the turn directory. Verified history belongs to the recording index. */
-internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val index: RecordingIndex) {
+internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val index: RecordingIndex,
+    private val httpClient: okhttp3.OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private var directToolCatalog: String? = null
 
@@ -43,7 +44,7 @@ internal class CodexAgentLoop(private val sandbox: AgentSandbox, private val ind
             val trace = mutableListOf<AgentTraceStep>()
             val workspace = question.takeIf(NodeWorkspaceTool::requested)?.let { NodeWorkspaceTool(sandbox, recordingId) }
             val catalog = modelCatalog(recordingId)
-            val answer = CodexModelRelay(base, apiKey).use { relay ->
+            val answer = CodexModelRelay(base, apiKey, httpClient).use { relay ->
                 val args = listOf(
                     "-c", "model_provider=\"sound\"",
                     "-c", "model_providers.sound.name=\"Sound Software\"",

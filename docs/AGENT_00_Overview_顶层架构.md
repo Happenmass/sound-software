@@ -139,7 +139,7 @@ Pi 和 Codex 都需要 Landlock ABI 6。启动器限制任务文件的读写，�
 
 在首页 Ai 或单录音会话，输入以 `/node` 开头的问题可发起脚本回合。Pi 和 Codex 都通过同一个 `run_node` 工具调用由 Android 启动的独立 Node 进程，回合只注册这个工具。脚本通过 `process.env.SOUND_AGENT_WORKSPACE` 访问当前范围的持久文件。脚本进程有独立临时目录，Landlock 限制文件范围，Node 权限限制子进程和原生扩展，seccomp 拒绝创建网络 socket。工具返回有限的标准输出和退出状态。
 
-「设置 → AI 助手后端」可选择 Pi 或 Codex，并为各自配置 Base URL、模型和 Key。Pi 支持 Chat Completions，地址留空时沿用现有纪要配置。Codex 要求 Responses API。未显式选择时，包含 Pi 且支持 Landlock 的设备默认使用 Pi，其他设备使用内置助手。显式选择的后端不可运行时显示错误。
+「设置 → AI 助手后端」可选择 Pi 或 Codex，并为各自配置 Base URL、模型和 Key。Pi 支持 Chat Completions，地址留空时沿用现有纪要配置。Codex 要求 Responses API。v0.1.12 默认使用 Pi，旧版的「自动」和「内置助手」读取为 Pi，显式保存的 Codex 选择继续生效。运行助手需要安装包包含所选后端，并且手机支持 Landlock ABI 6。
 
 双后端验证构建需 JDK 17、NDK 28.2.13676358、Node ≥22.19、Python ≥3.11 和 zstd。使用 [Codex ARM64 0.165.0 发布包](https://github.com/openai/codex/releases/download/rust-v0.165.0/codex-aarch64-unknown-linux-musl.zst)，构建脚本会校验摘要。
 
@@ -156,6 +156,12 @@ Pi 和 Codex 都需要 Landlock ABI 6。启动器限制任务文件的读写，�
 同日增加了真实工具链的文件交接测试。Magic V6 上，Codex 在首页 Ai 发出 `run_node` 调用，执行的脚本生成随机数并写入全库工作区。切到 Pi 后发起第二个 `/node` 回合，脚本从同一路径读取原值、计算两倍并写回。第一次回复和 Pi 的首次模型请求都不含原值。测试还校验跨工作区读、创建 TCP socket 和创建子进程失败，以及两轮临时目录回收。两个 Agent 与脚本进程在手机上运行，模型回复通过本机模拟接口提供。
 
 同日用真实 `gpt-6.1-sol` 重跑，Codex 使用 Responses，Pi 使用 Chat Completions。独立测试包从空的合成库和新会话开始。真实模型首次走了 Codex 的通用 `exec`，App 随后将内置模型目录的工具模式设为 `direct`，由 App Server 回调执行已注册的工具。复测中每个后端都从自然语言生成脚本并调用 `run_node`。Codex 写入运行时生成的原值 386784，Pi 从同一 JSON 文件读出并写回 773568。会话 ID 一致，原值未出现在 Codex 的聊天答复或工具输出中，两轮的临时目录均回收。模型访问经 USB 转发到临时网关，Agent 和 Node 在手机执行。验收用例为 `AgentBackendPhoneTest.realModelsGenerateAndShareAWorkspaceFile`。
+
+同日用原发布证书将 Magic V6 的 `dev.soundsoftware.app.release` 从 v0.1.10 覆盖到 v0.1.11（versionCode 13）。升级前后 18 个 WAV 和 18 份元数据的 SHA-256 一致，录音数据库所有逻辑行一致，含两个全库会话、三个单录音会话和 20 条待办。原设置逐字节一致，已保存的模型密钥可读取。签名 APK 和手机安装的 APK 摘要一致。
+
+同一真实模型用例在 v0.1.11 正式包内以隔离的合成库和设置复测通过。Codex 通过 Responses 生成并执行 Node 脚本，把运行时生成的 572599 写入持久工作区。切到 Pi 后，会话 ID 保持一致。Pi 通过 Chat Completions 生成并执行另一个脚本，从同一 JSON 文件读取该值并写回 1145198。本轮临时目录已回收。模型请求经 USB 临时转发，两个后端和脚本均在手机运行。
+
+Magic V6 原签名覆盖 v0.1.12 后，设置页实测仅显示 Pi 和 Codex。迁移测试覆盖未配置、旧自动、旧内置助手、Pi 和 Codex 五种存量设置，保留两组模型配置。正式包合成库用同一真实模型重跑了文件交接，Codex 写入 728689，同会话切到 Pi 后从同一持久文件读出并写回 1457378。
 
 ### Pi GUI 项目的桥接
 
